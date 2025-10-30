@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEVC Player</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>HEVC Player</h1>
+            <div class="file-controls">
+                <input type="file" id="fileInput" accept=".mov" />
+                <label for="fileInput" class="file-label">Select .mov</label>
+                <span id="fileName">No file selected</span>
+            </div>
+    </div>
+    </header>
+
+    <main>
+        <div class="player-section">
+            <div class="video-container">
+                <video id="videoPlayer" controls></video>
+                <div id="metadataOverlay" class="metadata-overlay"></div>
+            </div>
+
+            <div class="controls">
+                <button id="playPauseBtn" class="control-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                </button>
+                <div class="time-display">
+                    <span id="currentTime">00:00:00</span> / <span id="duration">00:00:00</span>
+                </div>
+                <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" step="0.1" />
+                <button id="screenshotBtn" class="control-btn" title="Screenshot">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                </button>
+                <label class="toggle-label">
+                    <input type="checkbox" id="overlayToggle" checked />
+                    <span>Overlay</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="metadata-section">
+            <div class="metadata-panel">
+                <h2>File Metadata</h2>
+                <div id="fileMetadata" class="metadata-content">
+                    <p class="no-data">No file loaded</p>
+                </div>
+            </div>
+
+            <div class="metadata-panel">
+                <h2>SEI Timecode (0x88)</h2>
+                <div id="timecodeMetadata" class="metadata-content">
+                    <div class="timecode-display">
+                        <div class="timecode-value">--:--:--:--</div>
+                        <div class="timecode-raw">Raw: N/A</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metadata-panel">
+                <h2>SEI User Data (0x05)
+                    <button id="clearPinsBtn" class="small-btn" title="Clear all pins">Clear Pins</button>
+                </h2>
+                <div id="userDataMetadata" class="metadata-content">
+                    <div id="pinnedData" class="pinned-section"></div>
+                    <div id="currentData" class="current-section">
+                        <p class="no-data">No SEI data available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div id="status">Ready</div>
+    </footer>
+    </div>
+
+    <!-- Load MP4Box as an ES module if the vendor build exports modules, then attach a UMD-like
+         API to window so non-module code (player.js) can use mp4box.createFile(). -->
+    <script type="module">
+        try {
+            const mp4boxModule = await import('./vendor/mp4box.all.min.js');
+
+            // If the module directly exported a createFile factory, expose a small wrapper
+            if (typeof mp4boxModule.createFile === 'function') {
+                // attach a small MP4Box-like object with createFile()
+                window.MP4Box = { createFile: mp4boxModule.createFile };
+                window.mp4box = window.MP4Box;
+            } else if (mp4boxModule.MP4Box) {
+                // some builds export MP4Box namespace
+                window.MP4Box = mp4boxModule.MP4Box;
+                window.mp4box = window.MP4Box;
+            } else if (mp4boxModule.default) {
+                // fallback to default export
+                window.MP4Box = mp4boxModule.default;
+                window.mp4box = window.MP4Box;
+            } else {
+                // last resort: attach the whole module object
+                window.MP4Box = mp4boxModule;
+                window.mp4box = window.MP4Box;
+            }
+
+            console.log('mp4box module loaded and attached to window.MP4Box');
+        } catch (err) {
+            // Import failed (maybe the vendor file is not reachable or not an ESM build)
+            console.error('Failed to import vendor/mp4box.all.min.js as module:', err);
+            // Do not throw — player.js will detect absence and show a friendly error
+        }
+    </script>
+
+    <script src="sei_parser.js"></script>
+    <script>
+        // Initialize WASM module
+        let wasmReady = false;
+        let wasmModule = null;
+
+        SEIParser().then(module => {
+            wasmModule = module;
+            window.parseSEIData = module.parseSEIData;
+            wasmReady = true;
+            console.log('SEI Parser WASM module loaded successfully');
+        }).catch(err => {
+            console.error('Failed to load WASM module:', err);
+        });
+    </script>
+    <script src="player.js"></script>
+</body>
+
+</html>
