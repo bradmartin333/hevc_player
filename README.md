@@ -1,4 +1,4 @@
-# HEVC Player
+# HEVC Player 🚧 Work in progress 🚧
 
 HEVC video player with real-time SEI metadata extraction and display
 
@@ -12,7 +12,6 @@ HEVC video player with real-time SEI metadata extraction and display
   - **Unregistered User Data (0x05)**
     - Automatic JSON payload parsing
     - Frame-synchronized display
-    - Pin/unpin functionality for persistent comparison
   - **Timecode (0x88)**
     - Human-readable format (HH:MM:SS:FF)
     - Raw payload bytes display

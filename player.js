@@ -15,12 +15,10 @@ class HEVCPlayer {
         this.fileMetadata = document.getElementById('fileMetadata');
         this.timecodeMetadata = document.getElementById('timecodeMetadata');
         this.userDataMetadata = document.getElementById('userDataMetadata');
-        this.clearPinsBtn = document.getElementById('clearPinsBtn');
         this.status = document.getElementById('status');
         this.currentFile = null;
         this.seiParser = null;
         this.seiData = new Map(); // frameNumber -> SEI data
-        this.pinnedFrames = new Set();
         this.currentSEIFrame = null;
         this.initEventListeners();
         this.updateStatus('Ready - Load a video file to begin');
@@ -32,8 +30,6 @@ class HEVCPlayer {
         this.seekBar.addEventListener('input', (e) => this.handleSeek(e));
         this.screenshotBtn.addEventListener('click', () => this.takeScreenshot());
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
-        this.clearPinsBtn.addEventListener('click', () => this.clearAllPins());
-
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
         this.video.addEventListener('timeupdate', () => this.handleTimeUpdate());
         this.video.addEventListener('play', () => this.updatePlayButton(true));
@@ -45,120 +41,107 @@ class HEVCPlayer {
         const file = event.target.files[0];
         if (!file) return;
 
+        let parsingStarted = false;
+
+        // Only allow .mov files as requested
+        const lower = file.name.toLowerCase();
+        if (!lower.endsWith('.mov')) {
+            this.updateStatus('Only .mov files are supported in this player. Please select a .mov file.');
+            return;
+        }
+
         this.currentFile = file;
-        this.fileName.textContent = file.name;
-        this.updateStatus(`Loading ${file.name}...`);
+        this.fileName.textContent = file.name + ' (' + this.formatFileSize(file.size) + ')';
 
-        // Create object URL for video
-        const url = URL.createObjectURL(file);
-        this.video.src = url;
-
-        // Warn user for raw .h265 files (many browsers won't play raw H.265)
-        const lowerName = file.name.toLowerCase();
-        if (lowerName.endsWith('.h265') || lowerName.endsWith('.hevc')) {
-            this.updateStatus('Loaded raw .h265 file — parsing SEI enabled but browser playback may be unsupported');
-        }
-
-        // Display file metadata
-        this.displayFileMetadata(file);
-
-        // Parse SEI data if WASM module is loaded
-        if (typeof window.parseSEIData === 'function') {
-            this.updateStatus('Parsing SEI data...');
-            await this.parseSEIData(file);
-        } else if (typeof SEIParser !== 'undefined') {
-            this.updateStatus('WASM module loading, please wait...');
-            // Wait a bit for WASM to initialize
-            setTimeout(async () => {
-                if (typeof window.parseSEIData === 'function') {
-                    this.updateStatus('Parsing SEI data...');
-                    await this.parseSEIData(file);
-                } else {
-                    this.updateStatus('WASM module failed to load - SEI parsing unavailable');
-                }
-            }, 1000);
-        } else {
-            this.updateStatus('WASM module not loaded - SEI parsing unavailable');
-        }
-    }
-
-    displayFileMetadata(file) {
-        const metadata = `
-            <div class="json-content">
-Name: ${file.name}
-Size: ${this.formatFileSize(file.size)}
-Type: ${file.type || 'Unknown'}
-Modified: ${new Date(file.lastModified).toLocaleString()}
-            </div>
-        `;
-        this.fileMetadata.innerHTML = metadata;
-    }
-
-    async parseSEIData(file) {
+        // Attach file to video element for playback
         try {
-            // Read file as ArrayBuffer
-            const arrayBuffer = await file.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
+            if (this._objectUrl) {
+                try { URL.revokeObjectURL(this._objectUrl); } catch (e) { /* ignore */ }
+                this._objectUrl = null;
+            }
+            this._objectUrl = URL.createObjectURL(file);
+            this.video.src = this._objectUrl;
+            // update simple file metadata panel
+            if (this.fileMetadata) {
+                this.fileMetadata.innerHTML = `<p>File: ${file.name} — ${this.formatFileSize(file.size)}</p>`;
+            }
+            // attempt to load metadata
+            try { this.video.load(); } catch (e) { /* some browsers auto-load */ }
+        } catch (e) {
+            console.warn('Could not attach file to video element', e);
+        }
 
-            console.log(`File loaded: ${uint8Array.length} bytes`);
-            console.log(`First 32 bytes:`, Array.from(uint8Array.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' '));
-            // If this looks like an MP4/MOV container, demux it first to extract raw HEVC samples
-            if (this.isContainerFile(uint8Array, file.name)) {
-                this.updateStatus('Detected container file - demuxing HEVC track...');
-                console.log('Container detected, running MP4/MOV demux...');
-                const rawNal = await this.demuxContainerToNal(file);
-                if (!rawNal || rawNal.length === 0) {
-                    console.log('Demux produced no NAL data');
-                    this.updateStatus('Ready - No HEVC track or no SEI found in container');
+        try {
+            this.updateStatus('Preparing file...');
+
+            // Read a small header to detect container type
+            const headerBuf = await file.slice(0, 64).arrayBuffer();
+            const headerU8 = new Uint8Array(headerBuf);
+            if (this.isContainerFile(headerU8, file.name)) {
+                this.updateStatus('Demuxing container and extracting NAL units...');
+                // show SEI loading indicator
+                parsingStarted = true;
+                this.setSEILoading(true);
+                const annexB = await this.demuxContainerToNal(file);
+                if (!annexB) {
+                    this.updateStatus('No HEVC samples found or demux failed');
+                    // stop loading indicator
+                    if (parsingStarted) { this.setSEILoading(false); parsingStarted = false; }
                     return;
                 }
 
-                if (window.parseSEIData) {
-                    this.updateStatus('Extracting SEI data from demuxed HEVC stream...');
-                    console.log('Calling parseSEIData on demuxed stream...');
-                    const seiDataRaw = window.parseSEIData(rawNal);
-                    console.log('parseSEIData returned:', seiDataRaw);
-                    console.log('Number of entries:', seiDataRaw ? seiDataRaw.length : 0);
-                    if (seiDataRaw && seiDataRaw.length > 0) {
-                        console.log('Processing SEI data...');
-                        this.processSEIData(seiDataRaw);
-                        this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
-                    } else {
-                        console.log('No SEI data found after demux');
-                        this.updateStatus('Ready - No SEI data found in file');
+                if (typeof window.parseSEIData === 'function') {
+                    this.updateStatus('Parsing SEI data from container...');
+                    try {
+                        const seiDataRaw = window.parseSEIData(annexB);
+                        if (seiDataRaw && seiDataRaw.length > 0) {
+                            this.processSEIData(seiDataRaw);
+                            this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
+                        } else {
+                            this.seiData.clear();
+                            this.updateStatus('Ready - No SEI data found in file');
+                        }
+                    } catch (e) {
+                        console.error('WASM parseSEIData failed', e);
+                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
                     }
                 } else {
-                    console.error('parseSEIData function not available');
-                    this.updateStatus('WASM function not available');
-                }
-                return;
-            }
-
-            // Initialize WASM parser if available (raw .h265 path)
-            if (window.parseSEIData) {
-                this.updateStatus('Extracting SEI data from HEVC stream...');
-                console.log('Calling parseSEIData...');
-
-                const seiDataRaw = window.parseSEIData(uint8Array);
-                console.log('parseSEIData returned:', seiDataRaw);
-                console.log('Number of entries:', seiDataRaw ? seiDataRaw.length : 0);
-
-                // Process SEI data
-                if (seiDataRaw && seiDataRaw.length > 0) {
-                    console.log('Processing SEI data...');
-                    this.processSEIData(seiDataRaw);
-                    this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
-                } else {
-                    console.log('No SEI data found');
-                    this.updateStatus('Ready - No SEI data found in file');
+                    console.error('parseSEIData not available');
+                    this.updateStatus('WASM parser not available in page');
                 }
             } else {
-                console.error('parseSEIData function not available');
-                this.updateStatus('WASM function not available');
+                // Treat as raw Annex-B / .h265 file
+                this.updateStatus('Parsing raw HEVC stream...');
+                parsingStarted = true;
+                this.setSEILoading(true);
+                const ab = await file.arrayBuffer();
+                const u8 = new Uint8Array(ab);
+                if (typeof window.parseSEIData === 'function') {
+                    try {
+                        const seiDataRaw = window.parseSEIData(u8);
+                        if (seiDataRaw && seiDataRaw.length > 0) {
+                            this.processSEIData(seiDataRaw);
+                            this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
+                        } else {
+                            this.seiData.clear();
+                            this.updateStatus('Ready - No SEI data found in file');
+                        }
+                    } catch (e) {
+                        console.error('WASM parseSEIData failed', e);
+                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
+                    }
+                } else {
+                    this.updateStatus('WASM parser not available in page');
+                }
             }
-        } catch (error) {
-            console.error('Error parsing SEI data:', error);
-            this.updateStatus('Error parsing SEI data: ' + error.message);
+        } catch (err) {
+            console.error('handleFileSelect error', err);
+            this.updateStatus('Error preparing file: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+            if (parsingStarted) {
+                this.setSEILoading(false);
+                parsingStarted = false;
+            }
         }
     }
 
@@ -363,7 +346,6 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
         // Convert raw SEI data into structured format
         console.log('processSEIData called with', seiDataRaw.length, 'entries');
         this.seiData.clear();
-
         seiDataRaw.forEach((entry, index) => {
             console.log(`Entry ${index}:`, entry);
             const frameNumber = entry.frameNumber || 0;
@@ -380,6 +362,7 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
             } else if (entry.type === 0x05 || entry.type === 5) {
                 // User data SEI
                 console.log(`  -> User data for frame ${frameNumber}`);
+                // keep the JSON payload as-is (no debug extraction)
                 frameData.userData = entry;
             }
         });
@@ -425,12 +408,10 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
 
     updateTimecodeDisplay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
-
         if (seiFrame && seiFrame.timecode) {
             const tc = seiFrame.timecode;
             const timecodeString = tc.timecodeString || '--:--:--:--';
             const rawBytes = tc.rawBytes || 'N/A';
-
             this.timecodeMetadata.innerHTML = `
                 <div class="timecode-display">
                     <div class="timecode-value">${timecodeString}</div>
@@ -450,79 +431,32 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
     updateUserDataDisplay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
         const currentDataDiv = document.getElementById('currentData');
-
         if (seiFrame && seiFrame.userData) {
             this.currentSEIFrame = frameNumber;
             const userData = seiFrame.userData;
-            const isPinned = this.pinnedFrames.has(frameNumber);
+
+            let pretty = userData.jsonPayload || '';
+            try {
+                const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
+                pretty = JSON.stringify(obj, null, 2);
+            } catch (e) {
+                // leave as raw string
+            }
 
             currentDataDiv.innerHTML = `
-                <div class="data-item">
-                    <div class="data-item-header">
-                        <span class="frame-number">Frame ${frameNumber}</span>
-                        <button class="pin-btn ${isPinned ? 'pinned' : ''}" 
-                                onclick="player.togglePin(${frameNumber})">
-                            ${isPinned ? 'Pinned' : 'Pin'}
-                        </button>
+                    <div class="data-item">
+                        <div class="data-item-header">
+                            <span class="frame-number">Frame ${frameNumber}</span>
+                        </div>
+                        <div class="json-raw">Payload: <pre class="mono">${pretty}</pre></div>
                     </div>
-                    <div class="json-content">${this.formatJSON(userData.jsonPayload)}</div>
-                </div>
-            `;
+                `;
         } else {
             this.currentSEIFrame = null;
             currentDataDiv.innerHTML = '<p class="no-data">No SEI data available for this frame</p>';
         }
     }
 
-    togglePin(frameNumber) {
-        if (this.pinnedFrames.has(frameNumber)) {
-            this.pinnedFrames.delete(frameNumber);
-        } else {
-            this.pinnedFrames.add(frameNumber);
-        }
-        this.updatePinnedDisplay();
-        this.updateUserDataDisplay(this.currentSEIFrame || frameNumber);
-    }
-
-    updatePinnedDisplay() {
-        const pinnedDiv = document.getElementById('pinnedData');
-
-        if (this.pinnedFrames.size === 0) {
-            pinnedDiv.innerHTML = '';
-            return;
-        }
-
-        const pinnedHTML = Array.from(this.pinnedFrames)
-            .sort((a, b) => a - b)
-            .map(frameNumber => {
-                const seiFrame = this.seiData.get(frameNumber);
-                if (!seiFrame || !seiFrame.userData) return '';
-
-                const userData = seiFrame.userData;
-                return `
-                    <div class="pinned-item">
-                        <div class="data-item-header">
-                            <span class="frame-number">Frame ${frameNumber}</span>
-                            <button class="unpin-btn" onclick="player.togglePin(${frameNumber})">
-                                Unpin
-                            </button>
-                        </div>
-                        <div class="json-content">${this.formatJSON(userData.jsonPayload)}</div>
-                    </div>
-                `;
-            })
-            .join('');
-
-        pinnedDiv.innerHTML = pinnedHTML;
-    }
-
-    clearAllPins() {
-        this.pinnedFrames.clear();
-        this.updatePinnedDisplay();
-        if (this.currentSEIFrame !== null) {
-            this.updateUserDataDisplay(this.currentSEIFrame);
-        }
-    }
 
     updateOverlay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
@@ -654,6 +588,27 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
 
     updateStatus(message) {
         this.status.textContent = message;
+    }
+
+    // Toggle a visible SEI-loading state on the metadata panels and status line
+    setSEILoading(isLoading) {
+        try {
+            const panels = [this.fileMetadata, this.timecodeMetadata, this.userDataMetadata];
+            panels.forEach(p => {
+                if (!p) return;
+                // find the surrounding panel container (.metadata-panel)
+                const panelEl = p.closest ? p.closest('.metadata-panel') : (p.parentElement || p);
+                if (!panelEl) return;
+                if (isLoading) panelEl.classList.add('sei-loading'); else panelEl.classList.remove('sei-loading');
+            });
+
+            if (this.status) {
+                if (isLoading) this.status.classList.add('loading'); else this.status.classList.remove('loading');
+            }
+        } catch (e) {
+            // non-fatal
+            console.warn('setSEILoading failed', e);
+        }
     }
 }
 

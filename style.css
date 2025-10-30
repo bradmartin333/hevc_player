@@ -259,23 +259,6 @@ main {
     color: #808090;
 }
 
-.pinned-section {
-    margin-bottom: 15px;
-}
-
-.pinned-item,
-.data-item {
-    background: rgba(60, 60, 70, 0.6);
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 10px;
-    border-left: 3px solid #4a9eff;
-    position: relative;
-}
-
-.pinned-item {
-    border-left-color: #ffa500;
-}
 
 .data-item-header {
     display: flex;
@@ -289,40 +272,6 @@ main {
     color: #4a9eff;
 }
 
-.pin-btn {
-    padding: 4px 8px;
-    font-size: 11px;
-    background: rgba(255, 165, 0, 0.2);
-    color: #ffa500;
-    border: 1px solid #ffa500;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.pin-btn:hover {
-    background: rgba(255, 165, 0, 0.3);
-}
-
-.pin-btn.pinned {
-    background: rgba(255, 165, 0, 0.4);
-}
-
-.unpin-btn {
-    padding: 4px 8px;
-    font-size: 11px;
-    background: rgba(255, 70, 70, 0.2);
-    color: #ff6b6b;
-    border: 1px solid #ff6b6b;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.unpin-btn:hover {
-    background: rgba(255, 70, 70, 0.3);
-}
-
 .json-content {
     font-family: 'Courier New', monospace;
     font-size: 12px;
@@ -332,6 +281,58 @@ main {
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+#status.loading::after {
+    content: '';
+    display: inline-block;
+    margin-left: 8px;
+    vertical-align: middle;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-top-color: #4a9eff;
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.player-section,
+.metadata-section {
+    min-width: 0;
+}
+
+.metadata-section {
+    overflow: hidden;
+}
+
+.metadata-panel {
+    box-sizing: border-box;
+}
+
+.json-raw pre,
+.metadata-content pre,
+.mono {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 100%;
+    overflow: auto;
+    display: block;
+    max-height: 260px;
 }
 
 footer {
