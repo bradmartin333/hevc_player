@@ -9,7 +9,6 @@ class HEVCPlayer {
         this.seekBar = document.getElementById('seekBar');
         this.currentTimeDisplay = document.getElementById('currentTime');
         this.durationDisplay = document.getElementById('duration');
-        this.screenshotBtn = document.getElementById('screenshotBtn');
         this.overlayToggle = document.getElementById('overlayToggle');
         this.metadataOverlay = document.getElementById('metadataOverlay');
         this.fileMetadata = document.getElementById('fileMetadata');
@@ -28,7 +27,6 @@ class HEVCPlayer {
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.seekBar.addEventListener('input', (e) => this.handleSeek(e));
-        this.screenshotBtn.addEventListener('click', () => this.takeScreenshot());
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
         this.video.addEventListener('timeupdate', () => this.handleTimeUpdate());
@@ -61,11 +59,6 @@ class HEVCPlayer {
             }
             this._objectUrl = URL.createObjectURL(file);
             this.video.src = this._objectUrl;
-            // update simple file metadata panel
-            if (this.fileMetadata) {
-                this.fileMetadata.innerHTML = `<p>File: ${file.name} — ${this.formatFileSize(file.size)}</p>`;
-            }
-            // attempt to load metadata
             try { this.video.load(); } catch (e) { /* some browsers auto-load */ }
         } catch (e) {
             console.warn('Could not attach file to video element', e);
@@ -374,7 +367,7 @@ class HEVCPlayer {
         const duration = this.video.duration;
         this.durationDisplay.textContent = this.formatTime(duration);
         this.seekBar.max = duration;
-        this.updateStatus('Video loaded successfully');
+        this.updateStatus('Loading SEI data');
     }
 
     handleTimeUpdate() {
@@ -394,37 +387,12 @@ class HEVCPlayer {
         const fps = 30; // Default assumption
         const frameNumber = Math.floor(currentTime * fps);
 
-        // Update timecode display
-        this.updateTimecodeDisplay(frameNumber);
-
         // Update user data display
         this.updateUserDataDisplay(frameNumber);
 
         // Update overlay if enabled
         if (this.overlayToggle.checked) {
             this.updateOverlay(frameNumber);
-        }
-    }
-
-    updateTimecodeDisplay(frameNumber) {
-        const seiFrame = this.seiData.get(frameNumber);
-        if (seiFrame && seiFrame.timecode) {
-            const tc = seiFrame.timecode;
-            const timecodeString = tc.timecodeString || '--:--:--:--';
-            const rawBytes = tc.rawBytes || 'N/A';
-            this.timecodeMetadata.innerHTML = `
-                <div class="timecode-display">
-                    <div class="timecode-value">${timecodeString}</div>
-                    <div class="timecode-raw">Raw: ${rawBytes}</div>
-                </div>
-            `;
-        } else {
-            this.timecodeMetadata.innerHTML = `
-                <div class="timecode-display">
-                    <div class="timecode-value">--:--:--:--</div>
-                    <div class="timecode-raw">Raw: N/A</div>
-                </div>
-            `;
         }
     }
 
@@ -448,7 +416,7 @@ class HEVCPlayer {
                         <div class="data-item-header">
                             <span class="frame-number">Frame ${frameNumber}</span>
                         </div>
-                        <div class="json-raw">Payload: <pre class="mono">${pretty}</pre></div>
+                        <div class="json-raw"><pre class="mono">${pretty}</pre></div>
                     </div>
                 `;
         } else {
@@ -463,15 +431,9 @@ class HEVCPlayer {
 
         if (seiFrame && (seiFrame.timecode || seiFrame.userData)) {
             let overlayContent = '';
-
             if (seiFrame.timecode) {
                 overlayContent += `TC: ${seiFrame.timecode.timecodeString}\n`;
             }
-
-            if (seiFrame.userData && seiFrame.userData.jsonPayload) {
-                overlayContent += `\n${this.formatJSON(seiFrame.userData.jsonPayload, true)}`;
-            }
-
             this.metadataOverlay.textContent = overlayContent;
             this.metadataOverlay.classList.add('visible');
         } else {
@@ -523,40 +485,6 @@ class HEVCPlayer {
 
     handleSeek(event) {
         this.video.currentTime = event.target.value;
-    }
-
-    takeScreenshot() {
-        const canvas = document.createElement('canvas');
-        canvas.width = this.video.videoWidth;
-        canvas.height = this.video.videoHeight;
-        const ctx = canvas.getContext('2d');
-
-        // Draw video frame
-        ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
-
-        // Add metadata overlay if enabled
-        if (this.overlayToggle.checked && this.metadataOverlay.textContent) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fillRect(10, 10, 400, 200);
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '14px Courier New';
-
-            const lines = this.metadataOverlay.textContent.split('\n');
-            lines.forEach((line, index) => {
-                ctx.fillText(line, 20, 30 + (index * 20));
-            });
-        }
-
-        // Download screenshot
-        canvas.toBlob((blob) => {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `screenshot_${Date.now()}.png`;
-            a.click();
-            URL.revokeObjectURL(url);
-            this.updateStatus('Screenshot saved');
-        });
     }
 
     formatTime(seconds) {

@@ -6,7 +6,6 @@ HEVC video player with real-time SEI metadata extraction and display
 
 - **Video Playback**
   - Support for `.mov` files containing HEVC video tracks
-  - Display of file metadata
 
 - **SEI Metadata Extraction** (via WASM)
   - **Unregistered User Data (0x05)**
@@ -20,7 +19,6 @@ HEVC video player with real-time SEI metadata extraction and display
   - Play/pause
   - Seek bar with frame-accurate scrubbing
   - Time display (current/duration)
-  - Screenshot capture with optional metadata overlay
 
 - **Minimal Dependencies**
   - Pure HTML/CSS/JavaScript + WASM

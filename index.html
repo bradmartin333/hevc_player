@@ -37,13 +37,6 @@
                     <span id="currentTime">00:00:00</span> / <span id="duration">00:00:00</span>
                 </div>
                 <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" step="0.1" />
-                <button id="screenshotBtn" class="control-btn" title="Screenshot">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                </button>
                 <label class="toggle-label">
                     <input type="checkbox" id="overlayToggle" checked />
                     <span>Overlay</span>
@@ -51,31 +44,10 @@
             </div>
         </div>
 
-        <div class="metadata-section">
-            <div class="metadata-panel">
-                <h2>File Metadata</h2>
-                <div id="fileMetadata" class="metadata-content">
-                    <p class="no-data">No file loaded</p>
-                </div>
-            </div>
-
-            <div class="metadata-panel">
-                <h2>SEI Timecode (0x88)</h2>
-                <div id="timecodeMetadata" class="metadata-content">
-                    <div class="timecode-display">
-                        <div class="timecode-value">--:--:--:--</div>
-                        <div class="timecode-raw">Raw: N/A</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="metadata-panel">
-                <h2>SEI User Data (0x05)
-                </h2>
-                <div id="userDataMetadata" class="metadata-content">
-                    <div id="currentData" class="current-section">
-                        <p class="no-data">No SEI data available</p>
-                    </div>
+        <div class="metadata-panel">
+            <div id="userDataMetadata" class="metadata-content">
+                <div id="currentData" class="current-section">
+                    <p class="no-data">No SEI data available</p>
                 </div>
             </div>
         </div>
