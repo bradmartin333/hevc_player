@@ -234,6 +234,41 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
                         return resolve(null);
                     }
 
+                    // Try to detect NAL unit length size from the track's configuration (hvcC/avcC)
+                    // Default to 4 bytes if not available.
+                    try {
+                        const trackInfo = info.tracks.find(tt => tt.id === hevcTrackId) || null;
+                        let detectedNalLen = 4;
+
+                        if (trackInfo) {
+                            // MP4Box often exposes parsed config as `hvcC` or `avcC` on the track object
+                            if (trackInfo.hvcC && typeof trackInfo.hvcC.lengthSizeMinusOne === 'number') {
+                                detectedNalLen = trackInfo.hvcC.lengthSizeMinusOne + 1;
+                            } else if (trackInfo.avcC && typeof trackInfo.avcC.lengthSizeMinusOne === 'number') {
+                                detectedNalLen = trackInfo.avcC.lengthSizeMinusOne + 1;
+                            } else if (trackInfo.sample_description && trackInfo.sample_description[0]) {
+                                const sd = trackInfo.sample_description[0];
+                                if (sd.hvcC && typeof sd.hvcC.lengthSizeMinusOne === 'number') {
+                                    detectedNalLen = sd.hvcC.lengthSizeMinusOne + 1;
+                                } else if (sd.avcC && typeof sd.avcC.lengthSizeMinusOne === 'number') {
+                                    detectedNalLen = sd.avcC.lengthSizeMinusOne + 1;
+                                }
+                            }
+                        }
+
+                        // Safety: clamp to 1..4 (anything else is unusual for MP4 samples)
+                        if (typeof detectedNalLen !== 'number' || detectedNalLen < 1 || detectedNalLen > 4) {
+                            detectedNalLen = 4;
+                        }
+
+                        // store for use in onSamples closure
+                        mp4boxFile._detectedNalUnitLength = detectedNalLen;
+                        console.log('Detected NAL unit length (bytes):', detectedNalLen);
+                    } catch (e) {
+                        console.warn('Failed to detect nal unit length from track info, falling back to 4 bytes', e);
+                        mp4boxFile._detectedNalUnitLength = 4;
+                    }
+
                     // request extraction for the HEVC track
                     mp4boxFile.setExtractionOptions(hevcTrackId, null, { nbSamples: 0 });
                     mp4boxFile.start();
@@ -246,21 +281,32 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
                         const u8 = new Uint8Array(ab);
 
                         // Convert MP4 length-prefixed NAL units to Annex B (start codes)
-                        const converted = (function convertToAnnexB(view) {
+                        const detectedNalLen = (mp4boxFile._detectedNalUnitLength) ? mp4boxFile._detectedNalUnitLength : 4;
+
+                        const converted = (function convertToAnnexB(view, nalLenSize) {
                             try {
                                 const chunks = [];
                                 let off = 0;
-                                while (off + 4 <= view.length) {
-                                    const nalLen = (view[off] << 24) | (view[off + 1] << 16) | (view[off + 2] << 8) | (view[off + 3]);
-                                    if (nalLen <= 0 || nalLen > view.length - off - 4) {
-                                        // Looks like this sample isn't length-prefixed as expected — abort conversion
+                                // Validate nalLenSize
+                                if (typeof nalLenSize !== 'number' || nalLenSize < 1 || nalLenSize > 4) nalLenSize = 4;
+
+                                while (off + nalLenSize <= view.length) {
+                                    // read big-endian length of NAL
+                                    let nalLen = 0;
+                                    for (let i = 0; i < nalLenSize; i++) {
+                                        nalLen = (nalLen << 8) | view[off + i];
+                                    }
+
+                                    if (nalLen <= 0 || nalLen > view.length - off - nalLenSize) {
+                                        // sample might already be Annex-B or malformed; abort conversion
                                         return view;
                                     }
+
                                     // push start code
                                     chunks.push(new Uint8Array([0x00, 0x00, 0x00, 0x01]));
                                     // push nal data slice
-                                    chunks.push(view.slice(off + 4, off + 4 + nalLen));
-                                    off += 4 + nalLen;
+                                    chunks.push(view.slice(off + nalLenSize, off + nalLenSize + nalLen));
+                                    off += nalLenSize + nalLen;
                                 }
 
                                 // concat chunks
@@ -276,7 +322,7 @@ Modified: ${new Date(file.lastModified).toLocaleString()}
                             } catch (e) {
                                 return view;
                             }
-                        })(u8);
+                        })(u8, detectedNalLen);
 
                         samplesData.push(converted);
                     }
