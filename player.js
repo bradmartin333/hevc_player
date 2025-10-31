@@ -6,6 +6,8 @@ class HEVCPlayer {
         this.fileInput = document.getElementById('fileInput');
         this.fileName = document.getElementById('fileName');
         this.playPauseBtn = document.getElementById('playPauseBtn');
+        this.frameBackwardBtn = document.getElementById('frameBackwardBtn');
+        this.frameForwardBtn = document.getElementById('frameForwardBtn');
         this.seekBar = document.getElementById('seekBar');
         this.currentTimeDisplay = document.getElementById('currentTime');
         this.durationDisplay = document.getElementById('duration');
@@ -26,6 +28,8 @@ class HEVCPlayer {
     initEventListeners() {
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.frameBackwardBtn.addEventListener('click', () => this.stepFrameBackward());
+        this.frameForwardBtn.addEventListener('click', () => this.stepFrameForward());
         this.seekBar.addEventListener('input', (e) => this.handleSeek(e));
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
@@ -340,7 +344,7 @@ class HEVCPlayer {
         console.log('processSEIData called with', seiDataRaw.length, 'entries');
         this.seiData.clear();
         seiDataRaw.forEach((entry, index) => {
-            console.log(`Entry ${index}:`, entry);
+            // console.log(`Entry ${index}:`, entry);
             const frameNumber = entry.frameNumber || 0;
             if (!this.seiData.has(frameNumber)) {
                 this.seiData.set(frameNumber, {});
@@ -350,11 +354,11 @@ class HEVCPlayer {
 
             if (entry.type === 0x88 || entry.type === 136) {
                 // Timecode SEI
-                console.log(`  -> Timecode for frame ${frameNumber}`);
+                // console.log(`  -> Timecode for frame ${frameNumber}`);
                 frameData.timecode = entry;
             } else if (entry.type === 0x05 || entry.type === 5) {
                 // User data SEI
-                console.log(`  -> User data for frame ${frameNumber}`);
+                // console.log(`  -> User data for frame ${frameNumber}`);
                 // keep the JSON payload as-is (no debug extraction)
                 frameData.userData = entry;
             }
@@ -413,9 +417,6 @@ class HEVCPlayer {
 
             currentDataDiv.innerHTML = `
                     <div class="data-item">
-                        <div class="data-item-header">
-                            <span class="frame-number">Frame ${frameNumber}</span>
-                        </div>
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
                     </div>
                 `;
@@ -536,6 +537,30 @@ class HEVCPlayer {
         } catch (e) {
             // non-fatal
             console.warn('setSEILoading failed', e);
+        }
+    }
+
+    stepFrameBackward() {
+        if (!this.video.duration) return;
+        const fps = 30; // TODO get from .mov metadata
+        const step = 1 / fps;
+        let newTime = this.video.currentTime - step;
+        if (newTime < 0) newTime = 0;
+        this.video.currentTime = newTime;
+        if (!this.video.paused) {
+            this.video.pause();
+        }
+    }
+
+    stepFrameForward() {
+        if (!this.video.duration) return;
+        const fps = 30; // TODO get from .mov metadata
+        const step = 1 / fps;
+        let newTime = this.video.currentTime + step;
+        if (newTime > this.video.duration) newTime = this.video.duration;
+        this.video.currentTime = newTime;
+        if (!this.video.paused) {
+            this.video.pause();
         }
     }
 }
