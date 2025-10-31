@@ -37,12 +37,12 @@ if [ $? -eq 0 ]; then
     echo "  - build/sei_parser.js"
     echo "  - build/sei_parser.wasm"
     
-    # Copy to root for easier access
-    cp build/sei_parser.js ../sei_parser.js
-    cp build/sei_parser.wasm ../sei_parser.wasm
+    # Copy to public directory for Vite
+    cp build/sei_parser.js ../public/sei_parser.js
+    cp build/sei_parser.wasm ../public/sei_parser.wasm
     
     echo ""
-    echo "Files copied to root directory. Ready to use!"
+    echo "Files copied to public/ directory. Ready to use!"
 else
     echo "Build failed!"
     exit 1

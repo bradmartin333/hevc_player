@@ -163,34 +163,12 @@ class HEVCPlayer {
     // Use MP4Box.js to demux container and return concatenated NAL bytes (Uint8Array)
     demuxContainerToNal(file) {
         return new Promise(async (resolve, reject) => {
-            // Ensure MP4Box is available (vendor script must be present under ./vendor/mp4box.all.min.js)
-            if (typeof window.MP4Box === 'undefined' && typeof window.mp4box === 'undefined') {
-                console.error('MP4Box is not loaded. Expected vendor/mp4box.all.min.js to be present.');
-                this.updateStatus('mp4box.js is not loaded. Please ensure vendor/mp4box.all.min.js exists.');
-                return resolve(null);
-            }
-
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 arrayBuffer.fileStart = 0;
-                // Normalize MP4Box export shape (UMD vs ESM) and locate createFile factory
-                let mp4boxLib = window.MP4Box || window.mp4box || null;
-                // If the imported/module object wrapped the actual API under default or MP4Box, try those
-                if (mp4boxLib && typeof mp4boxLib.createFile !== 'function') {
-                    if (mp4boxLib.default && typeof mp4boxLib.default.createFile === 'function') {
-                        mp4boxLib = mp4boxLib.default;
-                    } else if (mp4boxLib.MP4Box && typeof mp4boxLib.MP4Box.createFile === 'function') {
-                        mp4boxLib = mp4boxLib.MP4Box;
-                    }
-                }
 
-                if (!mp4boxLib || typeof mp4boxLib.createFile !== 'function') {
-                    console.error('MP4Box present but does not expose createFile():', window.MP4Box || window.mp4box);
-                    this.updateStatus('mp4box.js loaded but API mismatch (createFile missing) — check console');
-                    return resolve(null);
-                }
-
-                const mp4boxFile = mp4boxLib.createFile();
+                const { createFile } = await import('mp4box');
+                const mp4boxFile = createFile();
                 let hevcTrackId = null;
                 const samplesData = [];
 

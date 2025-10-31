@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HEVC Player</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/src/style.css">
 </head>
 
 <body>
@@ -68,41 +68,8 @@
     </footer>
     </div>
 
-    <!-- Load MP4Box as an ES module if the vendor build exports modules, then attach a UMD-like
-         API to window so non-module code (player.js) can use mp4box.createFile(). -->
+    <script src="/sei_parser.js"></script>
     <script type="module">
-        try {
-            const mp4boxModule = await import('./vendor/mp4box.all.min.js');
-
-            // If the module directly exported a createFile factory, expose a small wrapper
-            if (typeof mp4boxModule.createFile === 'function') {
-                // attach a small MP4Box-like object with createFile()
-                window.MP4Box = { createFile: mp4boxModule.createFile };
-                window.mp4box = window.MP4Box;
-            } else if (mp4boxModule.MP4Box) {
-                // some builds export MP4Box namespace
-                window.MP4Box = mp4boxModule.MP4Box;
-                window.mp4box = window.MP4Box;
-            } else if (mp4boxModule.default) {
-                // fallback to default export
-                window.MP4Box = mp4boxModule.default;
-                window.mp4box = window.MP4Box;
-            } else {
-                // last resort: attach the whole module object
-                window.MP4Box = mp4boxModule;
-                window.mp4box = window.MP4Box;
-            }
-
-            console.log('mp4box module loaded and attached to window.MP4Box');
-        } catch (err) {
-            // Import failed (maybe the vendor file is not reachable or not an ESM build)
-            console.error('Failed to import vendor/mp4box.all.min.js as module:', err);
-            // Do not throw — player.js will detect absence and show a friendly error
-        }
-    </script>
-
-    <script src="sei_parser.js"></script>
-    <script>
         // Initialize WASM module
         let wasmReady = false;
         let wasmModule = null;
@@ -116,7 +83,7 @@
             console.error('Failed to load WASM module:', err);
         });
     </script>
-    <script src="player.js"></script>
+    <script type="module" src="/src/player.js"></script>
 </body>
 
 </html>

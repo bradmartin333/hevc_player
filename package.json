@@ -1,0 +1,16 @@
+{
+  "name": "hevc_player",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "cd wasm && ./build.sh",
+    "dev": "vite",
+    "build": "npm run build:wasm && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "mp4box": "^2.1.2"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
