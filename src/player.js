@@ -93,7 +93,7 @@ class HEVCPlayer {
                         const seiDataRaw = window.parseSEIData(annexB);
                         if (seiDataRaw && seiDataRaw.length > 0) {
                             this.processSEIData(seiDataRaw);
-                            this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
+                            if (this.status) this.status.style.display = 'none';
                         } else {
                             this.seiData.clear();
                             this.updateStatus('Ready - No SEI data found in file');
@@ -118,7 +118,7 @@ class HEVCPlayer {
                         const seiDataRaw = window.parseSEIData(u8);
                         if (seiDataRaw && seiDataRaw.length > 0) {
                             this.processSEIData(seiDataRaw);
-                            this.updateStatus(`Ready - Found ${seiDataRaw.length} SEI entries`);
+                            if (this.status) this.status.style.display = 'none';
                         } else {
                             this.seiData.clear();
                             this.updateStatus('Ready - No SEI data found in file');
@@ -494,6 +494,8 @@ class HEVCPlayer {
     }
 
     updateStatus(message) {
+        if (!this.status) return;
+        this.status.style.display = '';
         this.status.textContent = message;
     }
 

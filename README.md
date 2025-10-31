@@ -2,6 +2,19 @@
 
 HEVC container (.mov) video player with real-time SEI metadata extraction and display
 
+## TODO
+
+- Figure out why mp4box does not provide .mov metadata
+  - Use .mov metadata for FPS and duration calculations
+- Better layout and styling
+- Add zoom and pan controls for video playback
+- Implement keyboard shortcuts for frame navigation
+- Add option to export extracted SEI metadata as JSON or CSV
+- Implement a cool JSON viewer for frame SEI data
+- Optimize WASM SEI parsing for performance
+- Better loading indicators and user feedback during file processing
+  - Possibly batch WASM operations so the page doesn't freeze
+
 ## Features
 
 - **SEI Metadata Extraction (via WASM)**
@@ -29,11 +42,3 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 
 1. `npm install` to install dependencies in the project root directory
 1. `npm run dev` to start the development server in the project root directory
-
-## TODO
-
-- Figure out why mp4box does not provide .mov metadata
-- Implement a cool JSON viewer for frame SEI data
-- Optimize WASM SEI parsing for performance
-- Add support for additional SEI message types
-- Better loading indicators and user feedback during file processing
