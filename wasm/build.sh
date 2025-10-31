@@ -13,14 +13,14 @@ then
 fi
 
 # Create output directory
-mkdir -p ../build
+mkdir -p build
 
 # Compile WASM module
 emcc \
-    wasm/sei_parser.cpp \
-    wasm/bindings.cpp \
+    sei_parser.cpp \
+    bindings.cpp \
     -o build/sei_parser.js \
-    -I wasm \
+    -I . \
     -std=c++17 \
     -s WASM=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
@@ -38,8 +38,8 @@ if [ $? -eq 0 ]; then
     echo "  - build/sei_parser.wasm"
     
     # Copy to root for easier access
-    cp build/sei_parser.js sei_parser.js
-    cp build/sei_parser.wasm sei_parser.wasm
+    cp build/sei_parser.js ../sei_parser.js
+    cp build/sei_parser.wasm ../sei_parser.wasm
     
     echo ""
     echo "Files copied to root directory. Ready to use!"
