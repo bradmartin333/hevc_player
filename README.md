@@ -21,6 +21,7 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
   1.  `cd emsdk/`
   1. `./emsdk install latest`
   1. `./emsdk activate latest`
+- `npm install` to install dependencies in the project root directory
 - `npm run dev` to start the development server in the project root directory
 
 ## TODO
