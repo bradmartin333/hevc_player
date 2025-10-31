@@ -24,6 +24,18 @@ class HEVCPlayer {
         this.currentSEIFrame = null;
         this.initEventListeners();
         this.updateStatus('Ready - Load a video file to begin');
+
+        // Keep metadata-panel height matching the video-wrapper height
+        this.videoWrapperEl = document.querySelector('.video-wrapper');
+        this.metadataPanelEl = document.querySelector('.metadata-panel');
+        this.syncMetadataToVideoWrapper();
+        window.addEventListener('resize', () => this.syncMetadataToVideoWrapper());
+        try {
+            const ro = new ResizeObserver(() => this.syncMetadataToVideoWrapper());
+            if (this.videoWrapperEl) ro.observe(this.videoWrapperEl);
+        } catch (e) {
+            // ResizeObserver may not be available; window resize will still handle most cases
+        }
     }
 
     initEventListeners() {
@@ -426,25 +438,66 @@ class HEVCPlayer {
             this.currentSEIFrame = frameNumber;
             const userData = seiFrame.userData;
 
-            let pretty = userData.jsonPayload || '';
+            // Preserve scroll position of the JSON container when replacing content
             try {
-                const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
-                pretty = JSON.stringify(obj, null, 2);
-            } catch (e) {
-                // leave as raw string
-            }
+                const oldScrollEl = currentDataDiv.querySelector('.json-raw') || currentDataDiv;
+                const prevScrollTop = oldScrollEl ? oldScrollEl.scrollTop : 0;
+                const prevScrollHeight = oldScrollEl ? oldScrollEl.scrollHeight : 0;
 
-            currentDataDiv.innerHTML = `
+                let pretty = userData.jsonPayload || '';
+                try {
+                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
+                    pretty = JSON.stringify(obj, null, 2);
+                } catch (e) {
+                    // Leave as raw string
+                }
+
+                currentDataDiv.innerHTML = `
                     <div class="data-item">
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
                     </div>
                 `;
+
+                // Restore scroll position proportionally if possible
+                const newScrollEl = currentDataDiv.querySelector('.json-raw') || currentDataDiv;
+                if (newScrollEl) {
+                    // If sizes changed, maintain relative position
+                    if (prevScrollHeight > 0) {
+                        const ratio = prevScrollTop / prevScrollHeight;
+                        newScrollEl.scrollTop = Math.round(ratio * newScrollEl.scrollHeight);
+                    } else {
+                        newScrollEl.scrollTop = prevScrollTop;
+                    }
+                }
+            } catch (e) {
+                // Fallback: just render content
+                let pretty = userData.jsonPayload || '';
+                try {
+                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
+                    pretty = JSON.stringify(obj, null, 2);
+                } catch (err) { }
+                currentDataDiv.innerHTML = `
+                    <div class="data-item">
+                        <div class="json-raw"><pre class="mono">${pretty}</pre></div>
+                    </div>
+                `;
+            }
         } else {
             this.currentSEIFrame = null;
             currentDataDiv.innerHTML = '<p class="no-data">No SEI data available for this frame</p>';
         }
     }
 
+    syncMetadataToVideoWrapper() {
+        try {
+            if (!this.videoWrapperEl || !this.metadataPanelEl) return;
+            const h = this.videoWrapperEl.clientHeight;
+            // Apply height to metadata-panel so it aligns with video+controls
+            this.metadataPanelEl.style.height = h + 'px';
+        } catch (e) {
+            // Non-fatal
+        }
+    }
 
     updateOverlay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
