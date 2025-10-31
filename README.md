@@ -6,10 +6,10 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 
 - Figure out why mp4box does not provide .mov metadata
   - Use .mov metadata for FPS and duration calculations
-- Better layout and styling
+- Better responsive layout and styling
 - Add zoom and pan controls for video playback
-- Implement keyboard shortcuts for frame navigation
-- Add option to export extracted SEI metadata as JSON or CSV
+  - Show zoomed area in a separate window?
+  - Show selected section in video overlay as a rectangle?
 - Implement a cool JSON viewer for frame SEI data
 - Optimize WASM SEI parsing for performance
 - Better loading indicators and user feedback during file processing
@@ -20,6 +20,11 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 - **SEI Metadata Extraction (via WASM)**
   - Unregistered User Data (0x05): Frame-synchronized display
   - Timecode (0x88): Human-readable format (HH:MM:SS:FF)
+- **Export Functionality**: Download all extracted SEI metadata as JSON
+- **Keyboard Shortcuts**: 
+  - `Space` or `K`: Play/Pause
+  - `Arrow Left` or `J`: Previous frame
+  - `Arrow Right` or `L`: Next frame
 - **Video Playback**: Native .mov file support with HEVC codec
 - **Frame-by-frame Navigation**: Step through frames to inspect metadata
 - **Real-time Overlay**: Optional metadata overlay during playback

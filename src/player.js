@@ -17,6 +17,7 @@ class HEVCPlayer {
         this.timecodeMetadata = document.getElementById('timecodeMetadata');
         this.userDataMetadata = document.getElementById('userDataMetadata');
         this.status = document.getElementById('status');
+        this.exportBtn = document.getElementById('exportBtn');
         this.currentFile = null;
         this.seiParser = null;
         this.seiData = new Map(); // frameNumber -> SEI data
@@ -32,11 +33,45 @@ class HEVCPlayer {
         this.frameForwardBtn.addEventListener('click', () => this.stepFrameForward());
         this.seekBar.addEventListener('input', (e) => this.handleSeek(e));
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
+        this.exportBtn.addEventListener('click', () => this.exportSEIData());
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
         this.video.addEventListener('timeupdate', () => this.handleTimeUpdate());
         this.video.addEventListener('play', () => this.updatePlayButton(true));
         this.video.addEventListener('pause', () => this.updatePlayButton(false));
         this.video.addEventListener('ended', () => this.updatePlayButton(false));
+        document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+    }
+
+    handleKeyPress(event) {
+        // Ignore if user is typing in an input
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+
+        switch (event.key) {
+            case ' ':
+                event.preventDefault();
+                this.togglePlayPause();
+                break;
+            case 'ArrowLeft':
+                event.preventDefault();
+                this.stepFrameBackward();
+                break;
+            case 'ArrowRight':
+                event.preventDefault();
+                this.stepFrameForward();
+                break;
+            case 'k':
+                event.preventDefault();
+                this.togglePlayPause();
+                break;
+            case 'j':
+                event.preventDefault();
+                this.stepFrameBackward();
+                break;
+            case 'l':
+                event.preventDefault();
+                this.stepFrameForward();
+                break;
+        }
     }
 
     async handleFileSelect(event) {
@@ -343,6 +378,14 @@ class HEVCPlayer {
         });
 
         console.log(`Processed SEI data: ${this.seiData.size} frames`);
+
+        // Show export button when we have SEI data
+        if (this.exportBtn && this.seiData.size > 0) {
+            this.exportBtn.style.display = 'inline-flex';
+        }
+
+        // Advance to first frame
+        this.video.currentTime = 0;
     }
 
     handleVideoLoaded() {
@@ -364,9 +407,7 @@ class HEVCPlayer {
     updateSEIMetadata(currentTime) {
         if (!this.video.duration) return;
 
-        // Calculate approximate frame number based on time and assumed framerate
-        // Note: In production, you'd get actual framerate from video metadata
-        const fps = 30; // Default assumption
+        const fps = 60; // TODO get from .mov metadata
         const frameNumber = Math.floor(currentTime * fps);
 
         // Update user data display
@@ -522,10 +563,12 @@ class HEVCPlayer {
 
     stepFrameBackward() {
         if (!this.video.duration) return;
-        const fps = 30; // TODO get from .mov metadata
-        const step = 1 / fps;
-        let newTime = this.video.currentTime - step;
-        if (newTime < 0) newTime = 0;
+        const fps = 60; // TODO get from .mov metadata
+        // Use rounded current frame to avoid off-by-one due to tiny time differences
+        const currentFrame = Math.round(this.video.currentTime * fps);
+        const targetFrame = Math.max(currentFrame - 1, 0);
+        // Add a tiny epsilon so the browser seeks past any keyframe snapping threshold
+        const newTime = Math.max(targetFrame / fps + 0.001, 0);
         this.video.currentTime = newTime;
         if (!this.video.paused) {
             this.video.pause();
@@ -534,14 +577,59 @@ class HEVCPlayer {
 
     stepFrameForward() {
         if (!this.video.duration) return;
-        const fps = 30; // TODO get from .mov metadata
-        const step = 1 / fps;
-        let newTime = this.video.currentTime + step;
+        const fps = 60; // TODO get from .mov metadata
+        // Use rounded current frame to avoid off-by-one due to tiny time differences
+        const currentFrame = Math.round(this.video.currentTime * fps);
+        const maxFrame = Math.floor(this.video.duration * fps);
+        const targetFrame = Math.min(currentFrame + 1, maxFrame);
+        // Add a small epsilon to move past any keyframe snap-to-zero behavior
+        let newTime = targetFrame / fps + 0.001;
         if (newTime > this.video.duration) newTime = this.video.duration;
         this.video.currentTime = newTime;
         if (!this.video.paused) {
             this.video.pause();
         }
+    }
+
+    exportSEIData() {
+        if (this.seiData.size === 0) {
+            alert('No SEI data to export');
+            return;
+        }
+
+        const exportData = {
+            filename: this.currentFile ? this.currentFile.name : 'unknown',
+            timestamp: new Date().toISOString(),
+            frameCount: this.seiData.size,
+            frames: {}
+        };
+
+        this.seiData.forEach((data, frameNumber) => {
+            exportData.frames[frameNumber] = {
+                frameNumber,
+                timecode: data.timecode ? {
+                    timecodeString: data.timecode.timecodeString,
+                    hours: data.timecode.hours,
+                    minutes: data.timecode.minutes,
+                    seconds: data.timecode.seconds,
+                    frames: data.timecode.frames
+                } : null,
+                userData: data.userData ? {
+                    type: data.userData.type,
+                    jsonPayload: data.userData.jsonPayload
+                } : null
+            };
+        });
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `sei-data-${this.currentFile ? this.currentFile.name.replace(/\.[^/.]+$/, '') : 'export'}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 

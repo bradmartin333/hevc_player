@@ -95,6 +95,30 @@ header {
     box-shadow: 0 4px 12px rgba(74, 158, 255, 0.4);
 }
 
+.export-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.export-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.export-btn i {
+    font-size: 14px;
+}
+
 #fileName {
     color: #b0b0c0;
     font-size: 14px;
@@ -112,11 +136,11 @@ main {
 
 .status-label {
     padding: 12px 40px;
-    background: rgba(40, 40, 50, 0.5);
-    border-bottom: 1px solid rgba(74, 158, 255, 0.1);
-    font-size: 13px;
-    color: #b0b0c0;
     text-align: center;
+    font-size: 13px;
+    color: #ffffff;
+    background: rgba(40, 40, 50, 0.8);
+    border: 1px solid rgba(74, 158, 255, 0.4);
 }
 
 .player-section {
@@ -310,13 +334,16 @@ main {
     line-height: 1.6;
     color: #c0c0d0;
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    max-height: 100%;
 }
 
 .current-section {
     width: 100%;
+    max-height: 100%;
+    overflow: hidden;
 }
 
 .no-data {
@@ -324,6 +351,7 @@ main {
     font-style: italic;
     text-align: center;
     padding: 40px 20px;
+    margin: auto;
 }
 
 .timecode-display {
