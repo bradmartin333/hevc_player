@@ -4,8 +4,7 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 
 ## TODO
 
-- Figure out why mp4box does not provide .mov metadata
-  - Use .mov metadata for FPS and duration calculations
+- Use .mov metadata for FPS and duration calculations (Currently logged to console)
 - Better responsive layout and styling
 - Add zoom and pan controls for video playback
   - Show zoomed area in a separate window?

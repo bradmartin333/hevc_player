@@ -333,8 +333,15 @@ class HEVCPlayer {
                     }
                 };
 
-                // append and flush the whole file
                 mp4boxFile.appendBuffer(arrayBuffer);
+
+                // Get metadata
+                const keysBoxes = mp4boxFile.getBoxes("keys");
+                const ilstBoxes = mp4boxFile.getBoxes("ilst");
+                if (keysBoxes?.length > 0 && ilstBoxes?.length > 0 && keysBoxes[0]?.data && ilstBoxes[0]?.data) {
+                    const metadata = this.parseMetadata(keysBoxes[0].data, ilstBoxes[0].data);
+                }
+
                 mp4boxFile.flush();
 
                 // Wait a tick for onSamples to be called
@@ -362,7 +369,90 @@ class HEVCPlayer {
         });
     }
 
+    parseMetadata(keysView, ilstView) {
+        try {
+            // Parse keys from 'keys' box
+            const keys = [];
 
+            let offset = 0;
+            const metadataSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
+            offset += 4;
+
+            while (offset < keysView.byteLength) {
+                // Read item size (4 bytes, big-endian)
+                const itemSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read type (4 bytes after size)
+                const typeBytes = new Uint8Array(keysView.buffer, offset, 4);
+                offset += 4;
+                // Validate type and read data
+                const type = String.fromCharCode(...typeBytes);
+                const keySize = itemSize - 8;
+                if (type === 'mdta') {
+                    const dataBytes = new Uint8Array(keysView.buffer, offset, keySize);
+                    const key = new TextDecoder('utf-8').decode(dataBytes);
+                    keys.push(key.trim());
+                }
+                offset += keySize;
+            }
+
+            if (metadataSize !== keys.length) {
+                console.warn('Keys metadata size mismatch:', metadataSize, 'vs parsed', keys.length);
+            }
+
+            // Parse values from 'ilst' box
+            const values = {};
+            offset = 0;
+
+            while (offset < ilstView.byteLength) {
+                // Read item size (4 bytes, big-endian)
+                const itemSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read item index (4 bytes after size)
+                const index = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read data size (4 bytes after index)
+                const dataSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read type (4 bytes after size)
+                const typeBytes = new Uint8Array(ilstView.buffer, offset, 4);
+                offset += 4;
+                // Read unused bytes (8 bytes)
+                const oneVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                if (oneVal !== 1) {
+                    console.warn('Unexpected data box format, first 4 bytes != 1');
+                }
+                offset += 4;
+                const zeroVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                if (zeroVal !== 0) {
+                    console.warn('Unexpected data box format, second 4 bytes != 0');
+                }
+                offset += 4;
+                // Validate type and read data
+                const type = String.fromCharCode(...typeBytes);
+                const valueSize = dataSize - 16;
+                if (type === 'data') {
+                    // Read the actual data
+                    const dataBytes = new Uint8Array(ilstView.buffer, offset, valueSize);
+                    const key = new TextDecoder('utf-8').decode(dataBytes);
+                    values[index - 1] = key.trim();
+                }
+                offset += valueSize;
+            }
+
+            // Combine keys and values into metadata object
+            const metadata = {};
+            keys.forEach((key, i) => {
+                metadata[key] = values[i] || '';
+            });
+
+            console.log('Parsed metadata:', metadata);
+            return metadata;
+        } catch (e) {
+            console.error('Error parsing metadata:', e);
+            return {};
+        }
+    }
 
     processSEIData(seiDataRaw) {
         // Convert raw SEI data into structured format
