@@ -13,3 +13,4 @@ SEI Metadata Extraction (via WASM)
 - Optimize WASM SEI parsing for performance
 - Add support for additional SEI message types
 - Better loading indicators and user feedback during file processing
+- Use webpack or similar for module bundling and asset management
