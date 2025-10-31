@@ -11,10 +11,17 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 - **Frame-by-frame Navigation**: Step through frames to inspect metadata
 - **Real-time Overlay**: Optional metadata overlay during playback
 
-## Framework
+## Building from Source
 
-- Node.js 20+ and npm
-- Emscripten SDK (for WASM compilation)
+- Install Node.js 20+ and npm
+  1. Install nvm with `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash`
+  1. Install the latest version of node with `nvm install node`
+- Install Emscripten SDK (for WASM compilation)
+  1. `git clone https://github.com/emscripten-core/emsdk.git`
+  1.  `cd emsdk/`
+  1. `./emsdk install latest`
+  1. `./emsdk activate latest`
+- `npm run dev` to start the development server in the project root directory
 
 ## TODO
 
