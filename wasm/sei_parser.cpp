@@ -195,27 +195,21 @@ SEIEntry SEIParser::parseTimecode(const uint8_t* payload, size_t payloadSize, ui
     BitReader reader(payload, payloadSize);
 
     try {
-        // Based on H.265 D.2.27 Time code SEI message
-        uint32_t num_clock_ts = reader.readBits(2);
-        uint32_t units_field_based_flag = reader.readBits(1);
-        uint32_t counting_type = reader.readBits(5);
-        uint32_t full_timestamp_flag = reader.readBits(1);
-        uint32_t discontinuity_flag = reader.readBits(1);
-        uint32_t cnt_dropped_flag = reader.readBits(1);
-        uint32_t n_frames = reader.readBits(9);
+        // Read according to the specified format
+        uint32_t field0 = reader.readBits(2);   // value=1, size=2
+        uint32_t field1 = reader.readBits(1);   // value=1, size=1
+        uint32_t field2 = reader.readBits(1);   // value=0, size=1
+        uint32_t field3 = reader.readBits(5);   // value=0, size=5
+        uint32_t field4 = reader.readBits(1);   // value=1, size=1
+        uint32_t field5 = reader.readBits(1);   // value=0, size=1
+        uint32_t field6 = reader.readBits(1);   // value=0, size=1
         
-        uint32_t seconds = 0;
-        uint32_t minutes = 0;
-        uint32_t hours = 0;
-
-        if (full_timestamp_flag) {
-            seconds = reader.readBits(6);
-            minutes = reader.readBits(6);
-            hours = reader.readBits(5);
-        } else {
-            // Partial timestamp parsing would go here
-            // For simplicity, we'll leave at 0
-        }
+        // The actual timecode values
+        uint32_t n_frames = reader.readBits(9);  // frames_counter, size=9
+        uint32_t seconds = reader.readBits(6);   // seconds_counter, size=6
+        uint32_t minutes = reader.readBits(6);   // minutes_counter, size=6
+        uint32_t hours = reader.readBits(5);     // hours_counter, size=5
+        uint32_t field11 = reader.readBits(5);   // value=0, size=5
 
         // Build timecode string HH:MM:SS:FF
         std::stringstream ss;
