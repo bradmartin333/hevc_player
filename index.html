@@ -17,7 +17,8 @@
             <div class="header-content">
                 <div class="header-title">
                     <h1>HEVC Player</h1>
-                    <a href="https://github.com/bradmartin333/hevc_player" class="github-link" target="_blank" rel="noopener noreferrer" title="View on GitHub">
+                    <a href="https://github.com/bradmartin333/hevc_player" class="github-link" target="_blank"
+                        rel="noopener noreferrer" title="View on GitHub">
                         <i class="fa-brands fa-github"></i>
                     </a>
                 </div>
@@ -25,7 +26,8 @@
                     <input type="file" id="fileInput" accept=".mov" />
                     <label for="fileInput" class="file-label">Select .mov</label>
                     <span id="fileName">No file selected</span>
-                    <button id="exportBtn" class="export-btn" style="display: none;" title="Export SEI metadata as JSON">
+                    <button id="exportBtn" class="export-btn" style="display: none;"
+                        title="Export SEI metadata as JSON">
                         <i class="fa-solid fa-download"></i> Export SEI
                     </button>
                 </div>
@@ -43,48 +45,40 @@
                     </div>
 
                     <div class="controls">
-                <button id="frameBackwardBtn" class="control-btn" title="Previous Frame">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M15 18l-6-6 6-6v12z" />
-                    </svg>
-                </button>
-                <button id="playPauseBtn" class="control-btn">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z" />
-                    </svg>
-                </button>
-                <button id="frameForwardBtn" class="control-btn" title="Next Frame">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9 18l6-6-6-6v12z" />
-                    </svg>
-                </button>
-                <div class="time-display">
-                    <span id="currentTime">00:00:00</span> / <span id="duration">00:00:00</span>
+                        <button id="frameBackwardBtn" class="control-btn" title="Previous Frame">
+                            <i class="fa-solid fa-backward-step"></i>
+                        </button>
+                        <button id="playPauseBtn" class="control-btn">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <button id="frameForwardBtn" class="control-btn" title="Next Frame">
+                            <i class="fa-solid fa-forward-step"></i>
+                        </button>
+                        <div class="time-display">
+                            <span id="currentTime">00:00:00</span> / <span id="duration">00:00:00</span>
+                        </div>
+                        <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" step="0.1" />
+                        <label class="toggle-label">
+                            <input type="checkbox" id="overlayToggle" checked />
+                            <span>Overlay</span>
+                        </label>
+                    </div>
                 </div>
-                <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" step="0.1" />
-                <label class="toggle-label">
-                    <input type="checkbox" id="overlayToggle" checked />
-                    <span>Overlay</span>
-                </label>
-            </div>
-        </div>
 
-        <div class="metadata-panel">
-            <div id="userDataMetadata" class="metadata-content">
-                <div id="currentData" class="current-section">
-                    <p class="no-data">No SEI data available</p>
+                <div class="metadata-panel">
+                    <div id="userDataMetadata" class="metadata-content">
+                        <div id="currentData" class="current-section">
+                            <p class="no-data">No SEI data available</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
         </main>
     </div>
 
     <script src="/sei_parser.js"></script>
     <script type="module">
-        // Initialize WASM module
         let wasmReady = false;
         let wasmModule = null;
-
         SEIParser().then(module => {
             wasmModule = module;
             window.parseSEIData = module.parseSEIData;
