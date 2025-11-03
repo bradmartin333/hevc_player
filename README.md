@@ -32,3 +32,24 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 
 1. `npm install` to install dependencies in the project root directory
 1. `npm run dev` to start the development server in the project root directory
+
+## Module Interaction Flow
+
+```
+User Loads File
+    ↓
+player.js (HEVCPlayer)
+    ↓
+    ├─→ mp4Demuxer.demuxContainerToNal()
+    │       ├─→ nalConverter.convertToAnnexB()
+    │       └─→ metadataParser.parseMetadata()
+    ↓
+    ├─→ seiParser.parseSEIFromAnnexB()
+    │       ├─→ parseTimecodeSEI()
+    │       └─→ parseUserDataSEI()
+    ↓
+    └─→ Display Results
+            ├─→ formatTime()
+            ├─→ formatFileSize()
+            └─→ videoControls (user interaction)
+```
