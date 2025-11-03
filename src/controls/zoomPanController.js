@@ -140,6 +140,7 @@ export class ZoomPanController {
         this.canvas.addEventListener('mouseup', () => this.handleMouseUp());
         this.canvas.addEventListener('mouseleave', () => this.handleMouseUp());
         this.canvas.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
+        this.helpEl = doc.getElementsByClassName('help-text')[0];
 
         // Window resize
         this.popupWindow.addEventListener('resize', () => this.resizeCanvas());
@@ -191,6 +192,7 @@ export class ZoomPanController {
         this.dragStartPanX = this.panX;
         this.dragStartPanY = this.panY;
         this.canvas.classList.add('dragging');
+        this.hideHelpIfExists();
     }
 
     handleMouseMove(e) {
@@ -221,6 +223,26 @@ export class ZoomPanController {
         this.zoom = Math.max(1, Math.min(10, this.zoom + delta));
 
         this.updateZoomDisplay();
+        this.hideHelpIfExists();
+    }
+
+    hideHelpIfExists() {
+        if (!this.helpEl) return;
+        this.hideHelp();
+    }
+
+    hideHelp() {
+        try {
+            if (!this.helpEl) return;
+            const el = this.helpEl;
+            el.style.transition = 'opacity 180ms ease, transform 180ms ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(-50%) translateY(8px)';
+            setTimeout(() => { try { el.style.display = 'none'; } catch (e) { } }, 200);
+            this.helpEl = null;
+        } catch (e) {
+            // ignore
+        }
     }
 
     startRendering() {

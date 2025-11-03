@@ -144,3 +144,20 @@ canvas.dragging {
     color: #b0b0c0;
     pointer-events: none;
 }
+
+.help-text .help-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.help-text .help-line i {
+    width: 16px;
+    text-align: center;
+    color: #9fb6d8;
+}
+
+.help-text .help-line span {
+    display: inline-block;
+}
