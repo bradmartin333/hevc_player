@@ -1,12 +1,10 @@
 // MP4 Demuxer - Handles MP4/MOV file demuxing using MP4Box.js
 
 import { NALConverter } from '../utils/nalConverter.js';
-import { MetadataParser } from '../parsers/metadataParser.js';
 
 export class MP4Demuxer {
     constructor() {
         this.nalConverter = new NALConverter();
-        this.metadataParser = new MetadataParser();
     }
 
     async demuxContainerToNal(file) {
@@ -61,11 +59,17 @@ export class MP4Demuxer {
                 mp4boxFile.appendBuffer(arrayBuffer);
 
                 // Parse metadata
-                const keysBoxes = mp4boxFile.getBoxes("keys");
-                const ilstBoxes = mp4boxFile.getBoxes("ilst");
                 let metadata = null;
-                if (keysBoxes?.length > 0 && ilstBoxes?.length > 0 && keysBoxes[0]?.data && ilstBoxes[0]?.data) {
-                    metadata = this.metadataParser.parseMetadata(keysBoxes[0].data, ilstBoxes[0].data);
+                const udtaBox = mp4boxFile.getBox('udta');
+                if (udtaBox) {
+                    const keys = Object.values(udtaBox.meta.keys.keys);
+                    const list = Object.values(udtaBox.meta.ilst.list);
+                    if (keys.length === list.length) {
+                        metadata = {};
+                        for (let i = 0; i < keys.length; i++) {
+                            metadata[keys[i].toString().replace('mdta', '')] = list[i].value;
+                        }
+                    }
                 }
 
                 mp4boxFile.flush();
