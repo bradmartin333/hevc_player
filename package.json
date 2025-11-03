@@ -1,6 +1,10 @@
 {
   "name": "hevc_player",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bradmartin333/hevc_player.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

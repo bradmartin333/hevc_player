@@ -138,20 +138,21 @@ export class SEIParser {
             };
 
             // Read according to the minimal H265 format
-            const field0 = readBits(2);   // value=1, size=2
-            const field1 = readBits(1);   // value=1, size=1
-            const field2 = readBits(1);   // value=0, size=1
-            const field3 = readBits(5);   // value=0, size=5
-            const field4 = readBits(1);   // value=1, size=1
-            const field5 = readBits(1);   // value=0, size=1
-            const field6 = readBits(1);   // value=0, size=1
+            // Skip a few header bits according to minimal H265 timecode layout
+            readBits(2);
+            readBits(1);
+            readBits(1);
+            readBits(5);
+            readBits(1);
+            readBits(1);
+            readBits(1);
 
             // The actual timecode values
             const frames = readBits(9);   // frames_counter, size=9
             const seconds = readBits(6);  // seconds_counter, size=6
             const minutes = readBits(6);  // minutes_counter, size=6
             const hours = readBits(5);    // hours_counter, size=5
-            const field11 = readBits(5);  // value=0, size=5
+            readBits(5); // skip reserved bits
 
             // Build timecode string HH:MM:SS:FF
             const timecodeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;

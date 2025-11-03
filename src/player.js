@@ -383,7 +383,6 @@ class HEVCPlayer {
 }
 
 // Initialize player when DOM is loaded
-let player;
 document.addEventListener('DOMContentLoaded', () => {
     /**
      * Checks if the user agent indicates a mobile or tablet device.
@@ -396,5 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         alert("This website is designed for desktop use and may not work correctly on your device.");
     }
 
-    player = new HEVCPlayer();
+    // Expose to window for debugging/inspection
+    window.player = new HEVCPlayer();
 });

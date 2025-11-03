@@ -52,6 +52,11 @@ export class MetadataParser {
                     values[index - 1] = value;
                 }
                 offset += valueSize;
+
+                // Check that the size matches itemSize
+                if (dataSize + 8 !== itemSize) {
+                    console.warn('Ilst item size mismatch at index', index, ':', itemSize, 'vs parsed', dataSize + 8);
+                }
             }
 
             // Combine keys and values into metadata object
