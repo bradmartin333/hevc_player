@@ -385,5 +385,16 @@ class HEVCPlayer {
 // Initialize player when DOM is loaded
 let player;
 document.addEventListener('DOMContentLoaded', () => {
+    /**
+     * Checks if the user agent indicates a mobile or tablet device.
+     * @returns {boolean} - True if the device is mobile, false otherwise.
+     */
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // Alert users on mobile devices about potential issues
+    if (isMobile) {
+        alert("This website is designed for desktop use and may not work correctly on your device.");
+    }
+
     player = new HEVCPlayer();
 });
