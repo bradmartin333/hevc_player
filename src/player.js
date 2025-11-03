@@ -3,7 +3,7 @@
 import { SEIParser } from './parsers/seiParser.js';
 import { MP4Demuxer } from './demux/mp4Demuxer.js';
 import { VideoControls } from './controls/videoControls.js';
-import { formatTime, formatFileSize } from './utils/formatters.js';
+import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
 
 class HEVCPlayer {
     constructor() {
@@ -128,14 +128,15 @@ class HEVCPlayer {
 
             const headerBuf = await file.slice(0, 64).arrayBuffer();
             const headerU8 = new Uint8Array(headerBuf);
-            
+
             if (this.mp4Demuxer.isContainerFile(headerU8, file.name)) {
                 this.updateStatus('Demuxing container and extracting NAL units...');
                 parsingStarted = true;
                 this.setSEILoading(true);
-                
+
                 const { nalData, metadata } = await this.mp4Demuxer.demuxContainerToNal(file);
-                
+                this.metadata = metadata;
+
                 if (!nalData) {
                     this.updateStatus('No HEVC samples found or demux failed');
                     if (parsingStarted) { this.setSEILoading(false); parsingStarted = false; }
@@ -157,25 +158,8 @@ class HEVCPlayer {
                     this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
                 }
             } else {
-                // Raw Annex-B / .h265 file
-                this.updateStatus('Parsing raw HEVC stream...');
-                parsingStarted = true;
-                this.setSEILoading(true);
-                const ab = await file.arrayBuffer();
-                const u8 = new Uint8Array(ab);
-                try {
-                    const seiDataRaw = this.seiParser.parseSEIFromAnnexB(u8);
-                    if (seiDataRaw && seiDataRaw.length > 0) {
-                        this.processSEIData(seiDataRaw);
-                        if (this.status) this.status.style.display = 'none';
-                    } else {
-                        this.seiData.clear();
-                        this.updateStatus('Ready - No SEI data found in file');
-                    }
-                } catch (e) {
-                    console.error('SEI parsing failed', e);
-                    this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
-                }
+                // Currently, only container files are supported
+                this.updateStatus('Unsupported file format. Only .mov files with HEVC video are supported.');
             }
         } catch (err) {
             console.error('handleFileSelect error', err);
@@ -245,7 +229,7 @@ class HEVCPlayer {
     updateUserDataDisplay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
         const currentDataDiv = document.getElementById('currentData');
-        
+
         if (seiFrame && seiFrame.userData) {
             this.currentSEIFrame = frameNumber;
             const userData = seiFrame.userData;
@@ -255,14 +239,7 @@ class HEVCPlayer {
                 const prevScrollTop = oldScrollEl ? oldScrollEl.scrollTop : 0;
                 const prevScrollHeight = oldScrollEl ? oldScrollEl.scrollHeight : 0;
 
-                let pretty = userData.jsonPayload || '';
-                try {
-                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
-                    pretty = JSON.stringify(obj, null, 2);
-                } catch (e) {
-                    // Leave as raw string
-                }
-
+                const pretty = formatJSON(userData.jsonPayload);
                 currentDataDiv.innerHTML = `
                     <div class="data-item">
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
@@ -279,11 +256,7 @@ class HEVCPlayer {
                     }
                 }
             } catch (e) {
-                let pretty = userData.jsonPayload || '';
-                try {
-                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
-                    pretty = JSON.stringify(obj, null, 2);
-                } catch (err) { }
+                const pretty = formatJSON(userData.jsonPayload);
                 currentDataDiv.innerHTML = `
                     <div class="data-item">
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
@@ -342,12 +315,12 @@ class HEVCPlayer {
                 if (!p) return;
                 const panelEl = p.closest ? p.closest('.metadata-panel') : (p.parentElement || p);
                 if (!panelEl) return;
-                if (isLoading) panelEl.classList.add('sei-loading'); 
+                if (isLoading) panelEl.classList.add('sei-loading');
                 else panelEl.classList.remove('sei-loading');
             });
 
             if (this.status) {
-                if (isLoading) this.status.classList.add('loading'); 
+                if (isLoading) this.status.classList.add('loading');
                 else this.status.classList.remove('loading');
             }
         } catch (e) {
@@ -363,26 +336,28 @@ class HEVCPlayer {
 
         const exportData = {
             filename: this.currentFile ? this.currentFile.name : 'unknown',
-            timestamp: new Date().toISOString(),
-            frameCount: this.seiData.size,
-            frames: {}
+            exportTimestamp: new Date().toISOString(),
+            clipMetadata: this.metadata,
+            frameMetadata: {}
         };
 
         this.seiData.forEach((data, frameNumber) => {
-            exportData.frames[frameNumber] = {
-                frameNumber,
-                timecode: data.timecode ? {
-                    timecodeString: data.timecode.timecodeString,
-                    hours: data.timecode.hours,
-                    minutes: data.timecode.minutes,
-                    seconds: data.timecode.seconds,
-                    frames: data.timecode.frames
-                } : null,
-                userData: data.userData ? {
-                    type: data.userData.type,
-                    jsonPayload: data.userData.jsonPayload
-                } : null
-            };
+            if (data.userData) {
+                let userData;
+                try {
+                    userData = typeof data.userData.jsonPayload === 'string'
+                        ? JSON.parse(data.userData.jsonPayload)
+                        : data.userData.jsonPayload;
+                } catch (e) {
+                    // If JSON parsing fails, store as raw string
+                    userData = data.userData.jsonPayload;
+                }
+
+                exportData.frameMetadata[frameNumber] = {
+                    timecode: data.timecode.timecodeString || null,
+                    userData: userData || null
+                };
+            }
         });
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
