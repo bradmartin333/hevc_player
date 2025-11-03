@@ -2,23 +2,12 @@
 
 HEVC container (.mov) video player with real-time SEI metadata extraction and display
 
-## TODO
-
-- Use .mov metadata for FPS and duration calculations (Currently logged to console)
-- Better responsive layout and styling
-- Add zoom and pan controls for video playback
-  - Show zoomed area in a separate window?
-  - Show selected section in video overlay as a rectangle?
-- Implement a cool JSON viewer for frame SEI data
-- Optimize WASM SEI parsing for performance
-- Better loading indicators and user feedback during file processing
-  - Possibly batch WASM operations so the page doesn't freeze
-
 ## Features
 
-- **SEI Metadata Extraction (via WASM)**
+- **SEI Metadata Extraction**
   - Unregistered User Data (0x05): Frame-synchronized display
   - Timecode (0x88): Human-readable format (HH:MM:SS:FF)
+- **Container Metadata**: View container-level metadata in console or export
 - **Export Functionality**: Download all extracted SEI metadata as JSON
 - **Keyboard Shortcuts**: 
   - `Space` or `K`: Play/Pause
@@ -27,6 +16,7 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 - **Video Playback**: Native .mov file support with HEVC codec
 - **Frame-by-frame Navigation**: Step through frames to inspect metadata
 - **Real-time Overlay**: Optional metadata overlay during playback
+- **Zoom and Pan**: Open a separate window to zoom and pan the video frame
 
 ## Development Setup
 
@@ -35,14 +25,30 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 1. Install nvm with `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash`
 1. Install the latest version of node with `nvm install node`
 
-### Install Emscripten SDK (for WASM compilation)
-
-1. `git clone https://github.com/emscripten-core/emsdk.git`
-1.  `cd emsdk/`
-1. `./emsdk install latest`
-1. `./emsdk activate latest`
-
 ### Run locally
 
 1. `npm install` to install dependencies in the project root directory
 1. `npm run dev` to start the development server in the project root directory
+
+## Module Interaction Flow
+
+```
+User Loads File
+    ↓
+player.js (HEVCPlayer)
+    ↓
+    ├─→ mp4Demuxer.demuxContainerToNal()
+    │       ├─→ nalConverter.convertToAnnexB()
+    │       └─→ metadataParser.parseMetadata()
+    ↓
+    ├─→ seiParser.parseSEIFromAnnexB()
+    │       ├─→ parseTimecodeSEI()
+    │       └─→ parseUserDataSEI()
+    ↓
+    └─→ Display Results
+            ├─→ formatTime()
+            ├─→ formatFileSize()
+            └─→ videoControls (user interaction)
+              ├─→ zoomPanController (zoom/pan functionality)
+              └─→ metadataOverlay (real-time metadata display)
+```

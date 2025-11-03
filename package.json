@@ -2,9 +2,8 @@
   "name": "hevc_player",
   "type": "module",
   "scripts": {
-    "build:wasm": "cd wasm && ./build.sh",
     "dev": "vite",
-    "build": "npm run build:wasm && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {

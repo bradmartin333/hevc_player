@@ -1,5 +1,11 @@
 // HEVC Player - Main JavaScript Logic
 
+import { SEIParser } from './parsers/seiParser.js';
+import { MP4Demuxer } from './demux/mp4Demuxer.js';
+import { VideoControls } from './controls/videoControls.js';
+import { ZoomPanController } from './controls/zoomPanController.js';
+import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
+
 class HEVCPlayer {
     constructor() {
         this.video = document.getElementById('videoPlayer');
@@ -18,10 +24,18 @@ class HEVCPlayer {
         this.userDataMetadata = document.getElementById('userDataMetadata');
         this.status = document.getElementById('status');
         this.exportBtn = document.getElementById('exportBtn');
+        this.zoomPanBtn = document.getElementById('zoomPanBtn');
         this.currentFile = null;
-        this.seiParser = null;
-        this.seiData = new Map(); // frameNumber -> SEI data
+        this.seiData = new Map();
         this.currentSEIFrame = null;
+        this.activeFPS = 60; // Default FPS
+
+        // Initialize parsers and controllers
+        this.seiParser = new SEIParser();
+        this.mp4Demuxer = new MP4Demuxer();
+        this.videoControls = new VideoControls(this.video, this);
+        this.zoomPanController = new ZoomPanController(this.video, this);
+
         this.initEventListeners();
         this.updateStatus('Ready - Load a video file to begin');
 
@@ -34,54 +48,54 @@ class HEVCPlayer {
             const ro = new ResizeObserver(() => this.syncMetadataToVideoWrapper());
             if (this.videoWrapperEl) ro.observe(this.videoWrapperEl);
         } catch (e) {
-            // ResizeObserver may not be available; window resize will still handle most cases
+            // ResizeObserver may not be available
         }
     }
 
     initEventListeners() {
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
-        this.frameBackwardBtn.addEventListener('click', () => this.stepFrameBackward());
-        this.frameForwardBtn.addEventListener('click', () => this.stepFrameForward());
-        this.seekBar.addEventListener('input', (e) => this.handleSeek(e));
+        this.playPauseBtn.addEventListener('click', () => this.videoControls.togglePlayPause());
+        this.frameBackwardBtn.addEventListener('click', () => this.videoControls.stepFrameBackward(this.activeFPS));
+        this.frameForwardBtn.addEventListener('click', () => this.videoControls.stepFrameForward(this.activeFPS));
+        this.seekBar.addEventListener('input', (e) => this.videoControls.handleSeek(e.target.value));
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
         this.exportBtn.addEventListener('click', () => this.exportSEIData());
+        this.zoomPanBtn.addEventListener('click', () => this.zoomPanController.openZoomPanWindow());
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
         this.video.addEventListener('timeupdate', () => this.handleTimeUpdate());
-        this.video.addEventListener('play', () => this.updatePlayButton(true));
-        this.video.addEventListener('pause', () => this.updatePlayButton(false));
-        this.video.addEventListener('ended', () => this.updatePlayButton(false));
+        this.video.addEventListener('play', () => this.videoControls.updatePlayButton(true));
+        this.video.addEventListener('pause', () => this.videoControls.updatePlayButton(false));
+        this.video.addEventListener('ended', () => this.videoControls.updatePlayButton(false));
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
     }
 
     handleKeyPress(event) {
-        // Ignore if user is typing in an input
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
 
         switch (event.key) {
             case ' ':
                 event.preventDefault();
-                this.togglePlayPause();
+                this.videoControls.togglePlayPause();
                 break;
             case 'ArrowLeft':
                 event.preventDefault();
-                this.stepFrameBackward();
+                this.videoControls.stepFrameBackward(this.activeFPS);
                 break;
             case 'ArrowRight':
                 event.preventDefault();
-                this.stepFrameForward();
+                this.videoControls.stepFrameForward(this.activeFPS);
                 break;
             case 'k':
                 event.preventDefault();
-                this.togglePlayPause();
+                this.videoControls.togglePlayPause();
                 break;
             case 'j':
                 event.preventDefault();
-                this.stepFrameBackward();
+                this.videoControls.stepFrameBackward(this.activeFPS);
                 break;
             case 'l':
                 event.preventDefault();
-                this.stepFrameForward();
+                this.videoControls.stepFrameForward(this.activeFPS);
                 break;
         }
     }
@@ -92,7 +106,6 @@ class HEVCPlayer {
 
         let parsingStarted = false;
 
-        // Only allow .mov files as requested
         const lower = file.name.toLowerCase();
         if (!lower.endsWith('.mov')) {
             this.updateStatus('Only .mov files are supported in this player. Please select a .mov file.');
@@ -100,7 +113,7 @@ class HEVCPlayer {
         }
 
         this.currentFile = file;
-        this.fileName.textContent = file.name + ' (' + this.formatFileSize(file.size) + ')';
+        this.fileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
 
         // Attach file to video element for playback
         try {
@@ -118,65 +131,42 @@ class HEVCPlayer {
         try {
             this.updateStatus('Preparing file...');
 
-            // Read a small header to detect container type
             const headerBuf = await file.slice(0, 64).arrayBuffer();
             const headerU8 = new Uint8Array(headerBuf);
-            if (this.isContainerFile(headerU8, file.name)) {
+
+            if (this.mp4Demuxer.isContainerFile(headerU8, file.name)) {
                 this.updateStatus('Demuxing container and extracting NAL units...');
-                // show SEI loading indicator
                 parsingStarted = true;
                 this.setSEILoading(true);
-                const annexB = await this.demuxContainerToNal(file);
-                if (!annexB) {
+
+                const { nalData, metadata } = await this.mp4Demuxer.demuxContainerToNal(file);
+                this.metadata = metadata;
+                this.activeFPS = metadata['project_frame_rate'] || 60;
+                if (this.activeFPS > 1000) this.activeFPS /= 1000;
+
+                if (!nalData) {
                     this.updateStatus('No HEVC samples found or demux failed');
-                    // stop loading indicator
                     if (parsingStarted) { this.setSEILoading(false); parsingStarted = false; }
                     return;
                 }
 
-                if (typeof window.parseSEIData === 'function') {
-                    this.updateStatus('Parsing SEI data from container...');
-                    try {
-                        const seiDataRaw = window.parseSEIData(annexB);
-                        if (seiDataRaw && seiDataRaw.length > 0) {
-                            this.processSEIData(seiDataRaw);
-                            if (this.status) this.status.style.display = 'none';
-                        } else {
-                            this.seiData.clear();
-                            this.updateStatus('Ready - No SEI data found in file');
-                        }
-                    } catch (e) {
-                        console.error('WASM parseSEIData failed', e);
-                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
+                this.updateStatus('Parsing SEI data from container...');
+                try {
+                    const seiDataRaw = this.seiParser.parseSEIFromAnnexB(nalData);
+                    if (seiDataRaw && seiDataRaw.length > 0) {
+                        this.processSEIData(seiDataRaw);
+                        if (this.status) this.status.style.display = 'none';
+                    } else {
+                        this.seiData.clear();
+                        this.updateStatus('Ready - No SEI data found in file');
                     }
-                } else {
-                    console.error('parseSEIData not available');
-                    this.updateStatus('WASM parser not available in page');
+                } catch (e) {
+                    console.error('SEI parsing failed', e);
+                    this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
                 }
             } else {
-                // Treat as raw Annex-B / .h265 file
-                this.updateStatus('Parsing raw HEVC stream...');
-                parsingStarted = true;
-                this.setSEILoading(true);
-                const ab = await file.arrayBuffer();
-                const u8 = new Uint8Array(ab);
-                if (typeof window.parseSEIData === 'function') {
-                    try {
-                        const seiDataRaw = window.parseSEIData(u8);
-                        if (seiDataRaw && seiDataRaw.length > 0) {
-                            this.processSEIData(seiDataRaw);
-                            if (this.status) this.status.style.display = 'none';
-                        } else {
-                            this.seiData.clear();
-                            this.updateStatus('Ready - No SEI data found in file');
-                        }
-                    } catch (e) {
-                        console.error('WASM parseSEIData failed', e);
-                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
-                    }
-                } else {
-                    this.updateStatus('WASM parser not available in page');
-                }
+                // Currently, only container files are supported
+                this.updateStatus('Unsupported file format. Only .mov files with HEVC video are supported.');
             }
         } catch (err) {
             console.error('handleFileSelect error', err);
@@ -189,277 +179,10 @@ class HEVCPlayer {
         }
     }
 
-    // Heuristic: detect MP4/MOV container by 'ftyp' header or extension
-    isContainerFile(uint8Array, name = '') {
-        try {
-            // Check file extension first
-            const lower = name.toLowerCase();
-            if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.m4v')) return true;
-
-            // Check for 'ftyp' at offset 4
-            if (uint8Array.length >= 12) {
-                const asAscii = String.fromCharCode.apply(null, Array.from(uint8Array.slice(4, 8)));
-                if (asAscii === 'ftyp') return true;
-            }
-        } catch (e) {
-            // ignore
-        }
-        return false;
-    }
-
-    // Use MP4Box.js to demux container and return concatenated NAL bytes (Uint8Array)
-    demuxContainerToNal(file) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                arrayBuffer.fileStart = 0;
-
-                const { createFile } = await import('mp4box');
-                const mp4boxFile = createFile();
-                let hevcTrackId = null;
-                const samplesData = [];
-
-                mp4boxFile.onError = (e) => {
-                    console.error('MP4Box error', e);
-                };
-
-                mp4boxFile.onReady = (info) => {
-                    // find HEVC/hvc1/hev1 track
-                    for (const t of info.tracks) {
-                        const codec = (t.codec || '').toLowerCase();
-                        if (codec.indexOf('hvc') !== -1 || codec.indexOf('hev') !== -1) {
-                            hevcTrackId = t.id;
-                            break;
-                        }
-                    }
-
-                    if (hevcTrackId == null) {
-                        console.log('No HEVC track found in container');
-                        mp4boxFile.flush();
-                        return resolve(null);
-                    }
-
-                    // Try to detect NAL unit length size from the track's configuration (hvcC/avcC)
-                    // Default to 4 bytes if not available.
-                    try {
-                        const trackInfo = info.tracks.find(tt => tt.id === hevcTrackId) || null;
-                        let detectedNalLen = 4;
-
-                        if (trackInfo) {
-                            // MP4Box often exposes parsed config as `hvcC` or `avcC` on the track object
-                            if (trackInfo.hvcC && typeof trackInfo.hvcC.lengthSizeMinusOne === 'number') {
-                                detectedNalLen = trackInfo.hvcC.lengthSizeMinusOne + 1;
-                            } else if (trackInfo.avcC && typeof trackInfo.avcC.lengthSizeMinusOne === 'number') {
-                                detectedNalLen = trackInfo.avcC.lengthSizeMinusOne + 1;
-                            } else if (trackInfo.sample_description && trackInfo.sample_description[0]) {
-                                const sd = trackInfo.sample_description[0];
-                                if (sd.hvcC && typeof sd.hvcC.lengthSizeMinusOne === 'number') {
-                                    detectedNalLen = sd.hvcC.lengthSizeMinusOne + 1;
-                                } else if (sd.avcC && typeof sd.avcC.lengthSizeMinusOne === 'number') {
-                                    detectedNalLen = sd.avcC.lengthSizeMinusOne + 1;
-                                }
-                            }
-                        }
-
-                        // Safety: clamp to 1..4 (anything else is unusual for MP4 samples)
-                        if (typeof detectedNalLen !== 'number' || detectedNalLen < 1 || detectedNalLen > 4) {
-                            detectedNalLen = 4;
-                        }
-
-                        // store for use in onSamples closure
-                        mp4boxFile._detectedNalUnitLength = detectedNalLen;
-                        console.log('Detected NAL unit length (bytes):', detectedNalLen);
-                    } catch (e) {
-                        console.warn('Failed to detect nal unit length from track info, falling back to 4 bytes', e);
-                        mp4boxFile._detectedNalUnitLength = 4;
-                    }
-
-                    // request extraction for the HEVC track
-                    mp4boxFile.setExtractionOptions(hevcTrackId, null, { nbSamples: 0 });
-                    mp4boxFile.start();
-                };
-
-                mp4boxFile.onSamples = (id, user, samples) => {
-                    // samples is an array of sample objects; sample.data is ArrayBuffer
-                    for (const s of samples) {
-                        const ab = s.data;
-                        const u8 = new Uint8Array(ab);
-
-                        // Convert MP4 length-prefixed NAL units to Annex B (start codes)
-                        const detectedNalLen = (mp4boxFile._detectedNalUnitLength) ? mp4boxFile._detectedNalUnitLength : 4;
-
-                        const converted = (function convertToAnnexB(view, nalLenSize) {
-                            try {
-                                const chunks = [];
-                                let off = 0;
-                                // Validate nalLenSize
-                                if (typeof nalLenSize !== 'number' || nalLenSize < 1 || nalLenSize > 4) nalLenSize = 4;
-
-                                while (off + nalLenSize <= view.length) {
-                                    // read big-endian length of NAL
-                                    let nalLen = 0;
-                                    for (let i = 0; i < nalLenSize; i++) {
-                                        nalLen = (nalLen << 8) | view[off + i];
-                                    }
-
-                                    if (nalLen <= 0 || nalLen > view.length - off - nalLenSize) {
-                                        // sample might already be Annex-B or malformed; abort conversion
-                                        return view;
-                                    }
-
-                                    // push start code
-                                    chunks.push(new Uint8Array([0x00, 0x00, 0x00, 0x01]));
-                                    // push nal data slice
-                                    chunks.push(view.slice(off + nalLenSize, off + nalLenSize + nalLen));
-                                    off += nalLenSize + nalLen;
-                                }
-
-                                // concat chunks
-                                let total = 0;
-                                for (const c of chunks) total += c.length;
-                                const out = new Uint8Array(total);
-                                let pos = 0;
-                                for (const c of chunks) {
-                                    out.set(c, pos);
-                                    pos += c.length;
-                                }
-                                return out;
-                            } catch (e) {
-                                return view;
-                            }
-                        })(u8, detectedNalLen);
-
-                        samplesData.push(converted);
-                    }
-                };
-
-                mp4boxFile.appendBuffer(arrayBuffer);
-
-                // Get metadata
-                const keysBoxes = mp4boxFile.getBoxes("keys");
-                const ilstBoxes = mp4boxFile.getBoxes("ilst");
-                if (keysBoxes?.length > 0 && ilstBoxes?.length > 0 && keysBoxes[0]?.data && ilstBoxes[0]?.data) {
-                    const metadata = this.parseMetadata(keysBoxes[0].data, ilstBoxes[0].data);
-                }
-
-                mp4boxFile.flush();
-
-                // Wait a tick for onSamples to be called
-                setTimeout(() => {
-                    if (samplesData.length === 0) {
-                        return resolve(null);
-                    }
-
-                    // Concatenate all sample arrays
-                    let total = 0;
-                    for (const s of samplesData) total += s.length;
-                    const out = new Uint8Array(total);
-                    let offset = 0;
-                    for (const s of samplesData) {
-                        out.set(s, offset);
-                        offset += s.length;
-                    }
-
-                    resolve(out);
-                }, 50);
-            } catch (err) {
-                console.error('Demux error', err);
-                resolve(null);
-            }
-        });
-    }
-
-parseMetadata(keysView, ilstView) {
-    try {
-        // Parse keys from 'keys' box
-        const keys = [];
-
-        let offset = 0;
-        const metadataSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
-        offset += 4;
-
-        while (offset < keysView.byteLength) {
-            // Read item size (4 bytes, big-endian)
-            const itemSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read type (4 bytes after size)
-            const typeBytes = new Uint8Array(keysView.buffer, offset, 4);
-            offset += 4;
-            // Validate type and read data
-            const type = String.fromCharCode(...typeBytes);
-            const keySize = itemSize - 8;
-            if (type === 'mdta') {
-                const dataBytes = new Uint8Array(keysView.buffer, offset, keySize);
-                const key = new TextDecoder('utf-8').decode(dataBytes);
-                keys.push(key.trim());
-            }
-            offset += keySize;
-        }
-
-        if (metadataSize !== keys.length) {
-            console.warn('Keys metadata size mismatch:', metadataSize, 'vs parsed', keys.length);
-        }
-
-        // Parse values from 'ilst' box
-        const values = {};
-        offset = 0;
-
-        while (offset < ilstView.byteLength) {
-            // Read item size (4 bytes, big-endian)
-            const itemSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read item index (4 bytes after size)
-            const index = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read data size (4 bytes after index)
-            const dataSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read type (4 bytes after size)
-            const typeBytes = new Uint8Array(ilstView.buffer, offset, 4);
-            offset += 4;
-            // Read unused bytes (8 bytes)
-            const oneVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            if (oneVal !== 1) {
-                console.warn('Unexpected data box format, first 4 bytes != 1');
-            }
-            offset += 4;
-            const zeroVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            if (zeroVal !== 0) {
-                console.warn('Unexpected data box format, second 4 bytes != 0');
-            }
-            offset += 4;
-            // Validate type and read data
-            const type = String.fromCharCode(...typeBytes);
-            const valueSize = dataSize - 16;
-            if (type === 'data') {
-                // Read the actual data
-                const dataBytes = new Uint8Array(ilstView.buffer, offset, valueSize);
-                const value = new TextDecoder('utf-8').decode(dataBytes);
-                values[index - 1] = value;
-            }
-            offset += valueSize;
-        }
-
-        // Combine keys and values into metadata object
-        const metadata = {};
-        keys.forEach((key, i) => {
-            metadata[key] = values[i] || '';
-        });
-
-        console.log('Parsed metadata:', metadata);
-        return metadata;
-    } catch (e) {
-        console.error('Error parsing metadata:', e);
-        return {};
-    }
-}
-
     processSEIData(seiDataRaw) {
-        // Convert raw SEI data into structured format
         console.log('processSEIData called with', seiDataRaw.length, 'entries');
         this.seiData.clear();
-        seiDataRaw.forEach((entry, index) => {
-            // console.log(`Entry ${index}:`, entry);
+        seiDataRaw.forEach((entry) => {
             const frameNumber = entry.frameNumber || 0;
             if (!this.seiData.has(frameNumber)) {
                 this.seiData.set(frameNumber, {});
@@ -468,54 +191,46 @@ parseMetadata(keysView, ilstView) {
             const frameData = this.seiData.get(frameNumber);
 
             if (entry.type === 0x88 || entry.type === 136) {
-                // Timecode SEI
-                // console.log(`  -> Timecode for frame ${frameNumber}`);
                 frameData.timecode = entry;
             } else if (entry.type === 0x05 || entry.type === 5) {
-                // User data SEI
-                // console.log(`  -> User data for frame ${frameNumber}`);
-                // keep the JSON payload as-is (no debug extraction)
                 frameData.userData = entry;
             }
         });
 
         console.log(`Processed SEI data: ${this.seiData.size} frames`);
 
-        // Show export button when we have SEI data
         if (this.exportBtn && this.seiData.size > 0) {
             this.exportBtn.style.display = 'inline-flex';
         }
 
-        // Advance to first frame
         this.video.currentTime = 0;
     }
 
     handleVideoLoaded() {
         const duration = this.video.duration;
-        this.durationDisplay.textContent = this.formatTime(duration);
+        this.durationDisplay.textContent = formatTime(duration);
         this.seekBar.max = duration;
         this.updateStatus('Loading SEI data');
+
+        // Show zoom/pan button when video is loaded and has valid dimensions
+        if (this.video.videoWidth > 0 && this.video.videoHeight > 0 && this.zoomPanBtn) {
+            this.zoomPanBtn.style.display = '';
+        }
     }
 
     handleTimeUpdate() {
         const currentTime = this.video.currentTime;
-        this.currentTimeDisplay.textContent = this.formatTime(currentTime);
+        this.currentTimeDisplay.textContent = formatTime(currentTime);
         this.seekBar.value = currentTime;
-
-        // Update SEI metadata for current frame
         this.updateSEIMetadata(currentTime);
     }
 
     updateSEIMetadata(currentTime) {
         if (!this.video.duration) return;
 
-        const fps = 60; // TODO get from .mov metadata
-        const frameNumber = Math.floor(currentTime * fps);
-
-        // Update user data display
+        const frameNumber = Math.floor(currentTime * this.activeFPS);
         this.updateUserDataDisplay(frameNumber);
 
-        // Update overlay if enabled
         if (this.overlayToggle.checked) {
             this.updateOverlay(frameNumber);
         }
@@ -524,34 +239,25 @@ parseMetadata(keysView, ilstView) {
     updateUserDataDisplay(frameNumber) {
         const seiFrame = this.seiData.get(frameNumber);
         const currentDataDiv = document.getElementById('currentData');
+
         if (seiFrame && seiFrame.userData) {
             this.currentSEIFrame = frameNumber;
             const userData = seiFrame.userData;
 
-            // Preserve scroll position of the JSON container when replacing content
             try {
                 const oldScrollEl = currentDataDiv.querySelector('.json-raw') || currentDataDiv;
                 const prevScrollTop = oldScrollEl ? oldScrollEl.scrollTop : 0;
                 const prevScrollHeight = oldScrollEl ? oldScrollEl.scrollHeight : 0;
 
-                let pretty = userData.jsonPayload || '';
-                try {
-                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
-                    pretty = JSON.stringify(obj, null, 2);
-                } catch (e) {
-                    // Leave as raw string
-                }
-
+                const pretty = formatJSON(userData.jsonPayload);
                 currentDataDiv.innerHTML = `
                     <div class="data-item">
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
                     </div>
                 `;
 
-                // Restore scroll position proportionally if possible
                 const newScrollEl = currentDataDiv.querySelector('.json-raw') || currentDataDiv;
                 if (newScrollEl) {
-                    // If sizes changed, maintain relative position
                     if (prevScrollHeight > 0) {
                         const ratio = prevScrollTop / prevScrollHeight;
                         newScrollEl.scrollTop = Math.round(ratio * newScrollEl.scrollHeight);
@@ -560,12 +266,7 @@ parseMetadata(keysView, ilstView) {
                     }
                 }
             } catch (e) {
-                // Fallback: just render content
-                let pretty = userData.jsonPayload || '';
-                try {
-                    const obj = typeof pretty === 'string' ? JSON.parse(pretty) : pretty;
-                    pretty = JSON.stringify(obj, null, 2);
-                } catch (err) { }
+                const pretty = formatJSON(userData.jsonPayload);
                 currentDataDiv.innerHTML = `
                     <div class="data-item">
                         <div class="json-raw"><pre class="mono">${pretty}</pre></div>
@@ -582,7 +283,6 @@ parseMetadata(keysView, ilstView) {
         try {
             if (!this.videoWrapperEl || !this.metadataPanelEl) return;
             const h = this.videoWrapperEl.clientHeight;
-            // Apply height to metadata-panel so it aligns with video+controls
             this.metadataPanelEl.style.height = h + 'px';
         } catch (e) {
             // Non-fatal
@@ -612,125 +312,29 @@ parseMetadata(keysView, ilstView) {
         }
     }
 
-    togglePlayPause() {
-        if (this.video.paused) {
-            const playPromise = this.video.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(err => {
-                    console.error('Play failed:', err);
-                    if (err.name === 'NotSupportedError') {
-                        this.updateStatus('Playback not supported for this file in your browser. Try .mov/.mp4 with HEVC support or use Safari/Edge.');
-                    } else {
-                        this.updateStatus('Playback failed: ' + err.message);
-                    }
-                });
-            }
-        } else {
-            this.video.pause();
-        }
-    }
-
-    updatePlayButton(isPlaying) {
-        if (isPlaying) {
-            this.playPauseBtn.innerHTML = `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
-                </svg>
-            `;
-        } else {
-            this.playPauseBtn.innerHTML = `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z"/>
-                </svg>
-            `;
-        }
-    }
-
-    handleSeek(event) {
-        this.video.currentTime = event.target.value;
-    }
-
-    formatTime(seconds) {
-        if (!isFinite(seconds)) return '00:00:00';
-
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-
-        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-    }
-
-    formatJSON(jsonString, compact = false) {
-        try {
-            const obj = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
-            return compact ? JSON.stringify(obj) : JSON.stringify(obj, null, 2);
-        } catch (e) {
-            return jsonString || 'Invalid JSON';
-        }
-    }
-
     updateStatus(message) {
         if (!this.status) return;
         this.status.style.display = '';
         this.status.textContent = message;
     }
 
-    // Toggle a visible SEI-loading state on the metadata panels and status line
     setSEILoading(isLoading) {
         try {
             const panels = [this.fileMetadata, this.timecodeMetadata, this.userDataMetadata];
             panels.forEach(p => {
                 if (!p) return;
-                // find the surrounding panel container (.metadata-panel)
                 const panelEl = p.closest ? p.closest('.metadata-panel') : (p.parentElement || p);
                 if (!panelEl) return;
-                if (isLoading) panelEl.classList.add('sei-loading'); else panelEl.classList.remove('sei-loading');
+                if (isLoading) panelEl.classList.add('sei-loading');
+                else panelEl.classList.remove('sei-loading');
             });
 
             if (this.status) {
-                if (isLoading) this.status.classList.add('loading'); else this.status.classList.remove('loading');
+                if (isLoading) this.status.classList.add('loading');
+                else this.status.classList.remove('loading');
             }
         } catch (e) {
-            // non-fatal
             console.warn('setSEILoading failed', e);
-        }
-    }
-
-    stepFrameBackward() {
-        if (!this.video.duration) return;
-        const fps = 60; // TODO get from .mov metadata
-        // Use rounded current frame to avoid off-by-one due to tiny time differences
-        const currentFrame = Math.round(this.video.currentTime * fps);
-        const targetFrame = Math.max(currentFrame - 1, 0);
-        // Add a tiny epsilon so the browser seeks past any keyframe snapping threshold
-        const newTime = Math.max(targetFrame / fps + 0.001, 0);
-        this.video.currentTime = newTime;
-        if (!this.video.paused) {
-            this.video.pause();
-        }
-    }
-
-    stepFrameForward() {
-        if (!this.video.duration) return;
-        const fps = 60; // TODO get from .mov metadata
-        // Use rounded current frame to avoid off-by-one due to tiny time differences
-        const currentFrame = Math.round(this.video.currentTime * fps);
-        const maxFrame = Math.floor(this.video.duration * fps);
-        const targetFrame = Math.min(currentFrame + 1, maxFrame);
-        // Add a small epsilon to move past any keyframe snap-to-zero behavior
-        let newTime = targetFrame / fps + 0.001;
-        if (newTime > this.video.duration) newTime = this.video.duration;
-        this.video.currentTime = newTime;
-        if (!this.video.paused) {
-            this.video.pause();
         }
     }
 
@@ -742,26 +346,28 @@ parseMetadata(keysView, ilstView) {
 
         const exportData = {
             filename: this.currentFile ? this.currentFile.name : 'unknown',
-            timestamp: new Date().toISOString(),
-            frameCount: this.seiData.size,
-            frames: {}
+            exportTimestamp: new Date().toISOString(),
+            clipMetadata: this.metadata,
+            frameMetadata: {}
         };
 
         this.seiData.forEach((data, frameNumber) => {
-            exportData.frames[frameNumber] = {
-                frameNumber,
-                timecode: data.timecode ? {
-                    timecodeString: data.timecode.timecodeString,
-                    hours: data.timecode.hours,
-                    minutes: data.timecode.minutes,
-                    seconds: data.timecode.seconds,
-                    frames: data.timecode.frames
-                } : null,
-                userData: data.userData ? {
-                    type: data.userData.type,
-                    jsonPayload: data.userData.jsonPayload
-                } : null
-            };
+            if (data.userData) {
+                let userData;
+                try {
+                    userData = typeof data.userData.jsonPayload === 'string'
+                        ? JSON.parse(data.userData.jsonPayload)
+                        : data.userData.jsonPayload;
+                } catch (e) {
+                    // If JSON parsing fails, store as raw string
+                    userData = data.userData.jsonPayload;
+                }
+
+                exportData.frameMetadata[frameNumber] = {
+                    timecode: data.timecode.timecodeString || null,
+                    userData: userData || null
+                };
+            }
         });
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
