@@ -2,15 +2,12 @@
 
 HEVC container (.mov) video player with real-time SEI metadata extraction and display
 
-## TODO
-
-- Add zoom and pan controls for video playback (Separate window with rectangle overlay on player)
-
 ## Features
 
 - **SEI Metadata Extraction**
   - Unregistered User Data (0x05): Frame-synchronized display
   - Timecode (0x88): Human-readable format (HH:MM:SS:FF)
+- **Container Metadata**: View container-level metadata in console or export
 - **Export Functionality**: Download all extracted SEI metadata as JSON
 - **Keyboard Shortcuts**: 
   - `Space` or `K`: Play/Pause
@@ -19,6 +16,7 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 - **Video Playback**: Native .mov file support with HEVC codec
 - **Frame-by-frame Navigation**: Step through frames to inspect metadata
 - **Real-time Overlay**: Optional metadata overlay during playback
+- **Zoom and Pan**: Open a separate window to zoom and pan the video frame
 
 ## Development Setup
 
@@ -51,4 +49,6 @@ player.js (HEVCPlayer)
             ├─→ formatTime()
             ├─→ formatFileSize()
             └─→ videoControls (user interaction)
+              ├─→ zoomPanController (zoom/pan functionality)
+              └─→ metadataOverlay (real-time metadata display)
 ```

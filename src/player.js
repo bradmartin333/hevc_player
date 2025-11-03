@@ -3,6 +3,7 @@
 import { SEIParser } from './parsers/seiParser.js';
 import { MP4Demuxer } from './demux/mp4Demuxer.js';
 import { VideoControls } from './controls/videoControls.js';
+import { ZoomPanController } from './controls/zoomPanController.js';
 import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
 
 class HEVCPlayer {
@@ -23,6 +24,7 @@ class HEVCPlayer {
         this.userDataMetadata = document.getElementById('userDataMetadata');
         this.status = document.getElementById('status');
         this.exportBtn = document.getElementById('exportBtn');
+        this.zoomPanBtn = document.getElementById('zoomPanBtn');
         this.currentFile = null;
         this.seiData = new Map();
         this.currentSEIFrame = null;
@@ -32,6 +34,7 @@ class HEVCPlayer {
         this.seiParser = new SEIParser();
         this.mp4Demuxer = new MP4Demuxer();
         this.videoControls = new VideoControls(this.video, this);
+        this.zoomPanController = new ZoomPanController(this.video, this);
 
         this.initEventListeners();
         this.updateStatus('Ready - Load a video file to begin');
@@ -57,6 +60,7 @@ class HEVCPlayer {
         this.seekBar.addEventListener('input', (e) => this.videoControls.handleSeek(e.target.value));
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
         this.exportBtn.addEventListener('click', () => this.exportSEIData());
+        this.zoomPanBtn.addEventListener('click', () => this.zoomPanController.openZoomPanWindow());
         this.video.addEventListener('loadedmetadata', () => this.handleVideoLoaded());
         this.video.addEventListener('timeupdate', () => this.handleTimeUpdate());
         this.video.addEventListener('play', () => this.videoControls.updatePlayButton(true));
@@ -207,6 +211,11 @@ class HEVCPlayer {
         this.durationDisplay.textContent = formatTime(duration);
         this.seekBar.max = duration;
         this.updateStatus('Loading SEI data');
+
+        // Show zoom/pan button when video is loaded and has valid dimensions
+        if (this.video.videoWidth > 0 && this.video.videoHeight > 0 && this.zoomPanBtn) {
+            this.zoomPanBtn.style.display = '';
+        }
     }
 
     handleTimeUpdate() {
