@@ -25,15 +25,7 @@ export class VideoControls {
     }
 
     updatePlayButton(isPlaying) {
-        this.ui.playPauseBtn.innerHTML = isPlaying ? `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
-            </svg>
-        ` : `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-            </svg>
-        `;
+        this.ui.playPauseBtn.innerHTML = isPlaying ? `<i class="fa-solid fa-pause"></i>` : `<i class="fa-solid fa-play"></i>`;
     }
 
     handleSeek(value) {
