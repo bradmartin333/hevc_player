@@ -5,13 +5,9 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 ## TODO
 
 - Use .mov metadata for FPS and duration calculations (Currently logged to console)
-- Add zoom and pan controls for video playback
-  - Show zoomed area in a separate window?
-  - Show selected section in video overlay as a rectangle?
-- Implement a cool JSON viewer for frame SEI data
+- Add zoom and pan controls for video playback (Separate window with rectangle overlay on player)
 - Optimize WASM SEI parsing for performance
-- Better loading indicators and user feedback during file processing
-  - Possibly batch WASM operations so the page doesn't freeze
+- Batch WASM operations so the page doesn't freeze
 
 ## Features
 
