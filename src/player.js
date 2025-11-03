@@ -26,6 +26,7 @@ class HEVCPlayer {
         this.currentFile = null;
         this.seiData = new Map();
         this.currentSEIFrame = null;
+        this.activeFPS = 60; // Default FPS
 
         // Initialize parsers and controllers
         this.seiParser = new SEIParser();
@@ -51,8 +52,8 @@ class HEVCPlayer {
     initEventListeners() {
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         this.playPauseBtn.addEventListener('click', () => this.videoControls.togglePlayPause());
-        this.frameBackwardBtn.addEventListener('click', () => this.videoControls.stepFrameBackward(60));
-        this.frameForwardBtn.addEventListener('click', () => this.videoControls.stepFrameForward(60));
+        this.frameBackwardBtn.addEventListener('click', () => this.videoControls.stepFrameBackward(this.activeFPS));
+        this.frameForwardBtn.addEventListener('click', () => this.videoControls.stepFrameForward(this.activeFPS));
         this.seekBar.addEventListener('input', (e) => this.videoControls.handleSeek(e.target.value));
         this.overlayToggle.addEventListener('change', (e) => this.toggleOverlay(e));
         this.exportBtn.addEventListener('click', () => this.exportSEIData());
@@ -74,11 +75,11 @@ class HEVCPlayer {
                 break;
             case 'ArrowLeft':
                 event.preventDefault();
-                this.videoControls.stepFrameBackward(60);
+                this.videoControls.stepFrameBackward(this.activeFPS);
                 break;
             case 'ArrowRight':
                 event.preventDefault();
-                this.videoControls.stepFrameForward(60);
+                this.videoControls.stepFrameForward(this.activeFPS);
                 break;
             case 'k':
                 event.preventDefault();
@@ -86,11 +87,11 @@ class HEVCPlayer {
                 break;
             case 'j':
                 event.preventDefault();
-                this.videoControls.stepFrameBackward(60);
+                this.videoControls.stepFrameBackward(this.activeFPS);
                 break;
             case 'l':
                 event.preventDefault();
-                this.videoControls.stepFrameForward(60);
+                this.videoControls.stepFrameForward(this.activeFPS);
                 break;
         }
     }
@@ -136,6 +137,8 @@ class HEVCPlayer {
 
                 const { nalData, metadata } = await this.mp4Demuxer.demuxContainerToNal(file);
                 this.metadata = metadata;
+                this.activeFPS = metadata['project_frame_rate'] || 60;
+                if (this.activeFPS > 1000) this.activeFPS /= 1000;
 
                 if (!nalData) {
                     this.updateStatus('No HEVC samples found or demux failed');
@@ -216,9 +219,7 @@ class HEVCPlayer {
     updateSEIMetadata(currentTime) {
         if (!this.video.duration) return;
 
-        const fps = 60; // TODO get from .mov metadata
-        const frameNumber = Math.floor(currentTime * fps);
-
+        const frameNumber = Math.floor(currentTime * this.activeFPS);
         this.updateUserDataDisplay(frameNumber);
 
         if (this.overlayToggle.checked) {
