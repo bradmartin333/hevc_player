@@ -137,7 +137,7 @@ export class SEIParser {
                 return result;
             };
 
-            // Read according to the WASM format
+            // Read according to the minimal H265 format
             const field0 = readBits(2);   // value=1, size=2
             const field1 = readBits(1);   // value=1, size=1
             const field2 = readBits(1);   // value=0, size=1
