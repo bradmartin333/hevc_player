@@ -6,6 +6,17 @@ import { VideoControls } from './controls/videoControls.js';
 import { ZoomPanController } from './controls/zoomPanController.js';
 import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
 
+// Global function for toggling JSON sections
+window.toggleJSON = function (id) {
+    const content = document.getElementById(id);
+    const button = content?.previousElementSibling;
+    if (content && button) {
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? '' : 'none';
+        button.textContent = isHidden ? '-' : '+';
+    }
+};
+
 class HEVCPlayer {
     constructor() {
         this.video = document.getElementById('videoPlayer');
@@ -29,6 +40,8 @@ class HEVCPlayer {
         this.seiData = new Map();
         this.currentSEIFrame = null;
         this.activeFPS = 60; // Default FPS
+        this.metadataView = 'container'; // 'container' or 'frame'
+        this.metadata = null; // Container metadata
 
         // Initialize parsers and controllers
         this.seiParser = new SEIParser();
@@ -67,6 +80,11 @@ class HEVCPlayer {
         this.video.addEventListener('pause', () => this.videoControls.updatePlayButton(false));
         this.video.addEventListener('ended', () => this.videoControls.updatePlayButton(false));
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+
+        // Metadata view toggle
+        document.querySelectorAll('input[name="metadataView"]').forEach(radio => {
+            radio.addEventListener('change', (e) => this.handleMetadataViewChange(e.target.value));
+        });
     }
 
     handleKeyPress(event) {
@@ -143,6 +161,11 @@ class HEVCPlayer {
                 this.metadata = metadata;
                 this.activeFPS = metadata['project_frame_rate'] || 60;
                 if (this.activeFPS > 1000) this.activeFPS /= 1000;
+
+                // Display container metadata immediately if in container view
+                if (this.metadataView === 'container') {
+                    this.displayContainerMetadata();
+                }
 
                 if (!nalData) {
                     this.updateStatus('No HEVC samples found or demux failed');
@@ -236,7 +259,38 @@ class HEVCPlayer {
         }
     }
 
+    handleMetadataViewChange(view) {
+        this.metadataView = view;
+        if (view === 'container') {
+            this.displayContainerMetadata();
+        } else {
+            const frameNumber = Math.floor(this.video.currentTime * this.activeFPS);
+            this.updateUserDataDisplay(frameNumber);
+        }
+    }
+
+    displayContainerMetadata() {
+        const currentDataDiv = document.getElementById('currentData');
+
+        if (!this.metadata) {
+            currentDataDiv.innerHTML = '<p class="no-data">No container metadata available</p>';
+            return;
+        }
+
+        const formatted = formatJSON(this.metadata);
+        currentDataDiv.innerHTML = `
+            <div class="data-item">
+                <div class="json-raw"><pre class="mono">${formatted}</pre></div>
+            </div>
+        `;
+    }
+
     updateUserDataDisplay(frameNumber) {
+        // Only update if we're in frame view mode
+        if (this.metadataView !== 'frame') {
+            return;
+        }
+
         const seiFrame = this.seiData.get(frameNumber);
         const currentDataDiv = document.getElementById('currentData');
 

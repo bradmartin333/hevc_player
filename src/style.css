@@ -136,11 +136,13 @@ header {
 #fileName {
     color: #b0b0c0;
     font-size: 14px;
-    /* Ensure file name doesn't push controls out on small screens */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 150px;
+    /* Always show full filename: allow wrapping and let flexbox allocate space */
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* Main Content Area */
@@ -464,6 +466,116 @@ main {
     font-size: 12px;
 }
 
+/* Metadata toggle styles */
+.metadata-toggle-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.metadata-toggle-label {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background: rgba(30, 30, 40, 0.6);
+    border: 1px solid rgba(74, 158, 255, 0.15);
+    cursor: pointer;
+    user-select: none;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.metadata-toggle-label input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.metadata-toggle-label:has(input:checked) {
+    background: rgba(74, 158, 255, 0.2);
+    border-color: rgba(74, 158, 255, 0.4);
+}
+
+.metadata-toggle-label:has(input:checked) span {
+    color: #4a9eff;
+    font-weight: 500;
+}
+
+.metadata-toggle-label:hover {
+    background: rgba(74, 158, 255, 0.15);
+}
+
+/* JSON Syntax Highlighting */
+.json-key {
+    color: #9cdcfe;
+}
+
+.json-string {
+    color: #ce9178;
+}
+
+.json-number {
+    color: #b5cea8;
+}
+
+.json-boolean {
+    color: #569cd6;
+}
+
+.json-null,
+.json-undefined {
+    color: #569cd6;
+}
+
+.json-bracket {
+    color: #ffd700;
+}
+
+.json-punctuation {
+    color: #d4d4d4;
+}
+
+.json-invalid {
+    color: #f48771;
+}
+
+/* Collapsible JSON elements */
+.json-content {
+    display: inline;
+    background: transparent;
+}
+
+.json-collapsible {
+    display: inline;
+}
+
+.json-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: rgba(74, 158, 255, 0.2);
+    border: 1px solid rgba(74, 158, 255, 0.4);
+    border-radius: 3px;
+    color: #4a9eff;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.2s;
+}
+
+.json-toggle:hover {
+    background: rgba(74, 158, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.json-toggle:active {
+    transform: scale(0.95);
+}
+
 #status.loading::after {
     content: '';
     display: inline-block;
@@ -502,9 +614,9 @@ main {
     white-space: pre-wrap;
     word-break: break-word;
     max-width: 100%;
-    overflow: auto;
+    overflow: visible;
     display: block;
-    max-height: 260px;
+    max-height: none;
 }
 
 #status {

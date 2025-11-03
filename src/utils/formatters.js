@@ -18,11 +18,128 @@ export function formatFileSize(bytes) {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
-export function formatJSON(jsonString, compact = false) {
+/**
+ * Format JSON with syntax highlighting and collapsible keys
+ * @param {string|object} jsonString - JSON string or object to format
+ * @returns {string} HTML string with syntax highlighting
+ */
+export function formatJSON(jsonString) {
     try {
         const obj = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
-        return compact ? JSON.stringify(obj) : JSON.stringify(obj, null, 2);
+        // If top-level is an object, render its contents without the outermost braces
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+            return formatObject(obj, 0, true);
+        }
+
+        return formatValue(obj, 0);
     } catch (e) {
-        return jsonString || 'Invalid JSON';
+        return '<span class="json-invalid">Invalid JSON</span>';
     }
+}
+
+function formatValue(value, depth) {
+    if (value === null) {
+        return '<span class="json-null">null</span>';
+    }
+
+    if (value === undefined) {
+        return '<span class="json-undefined">undefined</span>';
+    }
+
+    const type = typeof value;
+
+    if (type === 'boolean') {
+        return `<span class="json-boolean">${value}</span>`;
+    }
+
+    if (type === 'number') {
+        return `<span class="json-number">${value}</span>`;
+    }
+
+    if (type === 'string') {
+        return `<span class="json-string">"${escapeHtml(value)}"</span>`;
+    }
+
+    if (Array.isArray(value)) {
+        return formatArray(value, depth);
+    }
+
+    if (type === 'object') {
+        return formatObject(value, depth);
+    }
+
+    return escapeHtml(String(value));
+}
+
+function formatObject(obj, depth, isRoot = false) {
+    const keys = Object.keys(obj);
+    if (keys.length === 0) {
+        return '<span class="json-bracket">{}</span>';
+    }
+
+    const indent = '  '.repeat(depth);
+    const nextIndent = '  '.repeat(depth + 1);
+    const id = 'obj-' + Math.random().toString(36).substring(2, 11);
+
+    // isRoot parameter indicates caller requested omission of outer braces
+
+    let html = '';
+    if (!isRoot) {
+        html += `<span class="json-bracket">{</span>`;
+        html += `<span class="json-collapsible" data-id="${id}">`;
+        html += `<button class="json-toggle" onclick="toggleJSON('${id}')">+</button>`;
+        html += `<div class="json-content" id="${id}" style="display: none;">`;
+    } else {
+        html += `<div class="json-content root-json-content" id="${id}">`;
+    }
+
+    keys.forEach((key, index) => {
+        html += `\n${nextIndent}<span class="json-key">"${escapeHtml(key)}"</span>: `;
+        html += formatValue(obj[key], depth + 1);
+        if (index < keys.length - 1) {
+            html += '<span class="json-punctuation">,</span>';
+        }
+    });
+
+    html += `\n${indent}</div>`;
+    if (!isRoot) {
+        html += `</span>`;
+        html += `<span class="json-bracket">}</span>`;
+    }
+
+    return html;
+}
+
+function formatArray(arr, depth) {
+    if (arr.length === 0) {
+        return '<span class="json-bracket">[]</span>';
+    }
+
+    const indent = '  '.repeat(depth);
+    const nextIndent = '  '.repeat(depth + 1);
+    const id = 'arr-' + Math.random().toString(36).substring(2, 11);
+
+    let html = `<span class="json-bracket">[</span>`;
+    html += `<span class="json-collapsible" data-id="${id}">`;
+    html += `<button class="json-toggle" onclick="toggleJSON('${id}')">+</button>`;
+    html += `<div class="json-content" id="${id}" style="display: none;">`;
+
+    arr.forEach((item, index) => {
+        html += `\n${nextIndent}`;
+        html += formatValue(item, depth + 1);
+        if (index < arr.length - 1) {
+            html += '<span class="json-punctuation">,</span>';
+        }
+    });
+
+    html += `\n${indent}</div></span>`;
+    html += `<span class="json-bracket">]</span>`;
+
+    return html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }

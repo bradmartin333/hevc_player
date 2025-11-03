@@ -69,9 +69,19 @@
                 </div>
 
                 <div class="metadata-panel">
+                    <div class="metadata-toggle-container">
+                        <label class="metadata-toggle-label">
+                            <input type="radio" name="metadataView" value="container" checked />
+                            <span>Clip Metadata</span>
+                        </label>
+                        <label class="metadata-toggle-label">
+                            <input type="radio" name="metadataView" value="frame" />
+                            <span>Frame Metadata</span>
+                        </label>
+                    </div>
                     <div id="userDataMetadata" class="metadata-content">
                         <div id="currentData" class="current-section">
-                            <p class="no-data">No SEI data available</p>
+                            <p class="no-data">N/A</p>
                         </div>
                     </div>
                 </div>
