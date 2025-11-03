@@ -134,24 +134,19 @@ class HEVCPlayer {
                     return;
                 }
 
-                if (typeof window.parseSEIData === 'function') {
-                    this.updateStatus('Parsing SEI data from container...');
-                    try {
-                        const seiDataRaw = window.parseSEIData(annexB);
-                        if (seiDataRaw && seiDataRaw.length > 0) {
-                            this.processSEIData(seiDataRaw);
-                            if (this.status) this.status.style.display = 'none';
-                        } else {
-                            this.seiData.clear();
-                            this.updateStatus('Ready - No SEI data found in file');
-                        }
-                    } catch (e) {
-                        console.error('WASM parseSEIData failed', e);
-                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
+                this.updateStatus('Parsing SEI data from container...');
+                try {
+                    const seiDataRaw = this.parseSEIFromAnnexB(annexB);
+                    if (seiDataRaw && seiDataRaw.length > 0) {
+                        this.processSEIData(seiDataRaw);
+                        if (this.status) this.status.style.display = 'none';
+                    } else {
+                        this.seiData.clear();
+                        this.updateStatus('Ready - No SEI data found in file');
                     }
-                } else {
-                    console.error('parseSEIData not available');
-                    this.updateStatus('WASM parser not available in page');
+                } catch (e) {
+                    console.error('SEI parsing failed', e);
+                    this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
                 }
             } else {
                 // Treat as raw Annex-B / .h265 file
@@ -160,22 +155,18 @@ class HEVCPlayer {
                 this.setSEILoading(true);
                 const ab = await file.arrayBuffer();
                 const u8 = new Uint8Array(ab);
-                if (typeof window.parseSEIData === 'function') {
-                    try {
-                        const seiDataRaw = window.parseSEIData(u8);
-                        if (seiDataRaw && seiDataRaw.length > 0) {
-                            this.processSEIData(seiDataRaw);
-                            if (this.status) this.status.style.display = 'none';
-                        } else {
-                            this.seiData.clear();
-                            this.updateStatus('Ready - No SEI data found in file');
-                        }
-                    } catch (e) {
-                        console.error('WASM parseSEIData failed', e);
-                        this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
+                try {
+                    const seiDataRaw = this.parseSEIFromAnnexB(u8);
+                    if (seiDataRaw && seiDataRaw.length > 0) {
+                        this.processSEIData(seiDataRaw);
+                        if (this.status) this.status.style.display = 'none';
+                    } else {
+                        this.seiData.clear();
+                        this.updateStatus('Ready - No SEI data found in file');
                     }
-                } else {
-                    this.updateStatus('WASM parser not available in page');
+                } catch (e) {
+                    console.error('SEI parsing failed', e);
+                    this.updateStatus('Error parsing SEI data: ' + (e && e.message ? e.message : String(e)));
                 }
             }
         } catch (err) {
@@ -288,47 +279,7 @@ class HEVCPlayer {
                         // Convert MP4 length-prefixed NAL units to Annex B (start codes)
                         const detectedNalLen = (mp4boxFile._detectedNalUnitLength) ? mp4boxFile._detectedNalUnitLength : 4;
 
-                        const converted = (function convertToAnnexB(view, nalLenSize) {
-                            try {
-                                const chunks = [];
-                                let off = 0;
-                                // Validate nalLenSize
-                                if (typeof nalLenSize !== 'number' || nalLenSize < 1 || nalLenSize > 4) nalLenSize = 4;
-
-                                while (off + nalLenSize <= view.length) {
-                                    // read big-endian length of NAL
-                                    let nalLen = 0;
-                                    for (let i = 0; i < nalLenSize; i++) {
-                                        nalLen = (nalLen << 8) | view[off + i];
-                                    }
-
-                                    if (nalLen <= 0 || nalLen > view.length - off - nalLenSize) {
-                                        // sample might already be Annex-B or malformed; abort conversion
-                                        return view;
-                                    }
-
-                                    // push start code
-                                    chunks.push(new Uint8Array([0x00, 0x00, 0x00, 0x01]));
-                                    // push nal data slice
-                                    chunks.push(view.slice(off + nalLenSize, off + nalLenSize + nalLen));
-                                    off += nalLenSize + nalLen;
-                                }
-
-                                // concat chunks
-                                let total = 0;
-                                for (const c of chunks) total += c.length;
-                                const out = new Uint8Array(total);
-                                let pos = 0;
-                                for (const c of chunks) {
-                                    out.set(c, pos);
-                                    pos += c.length;
-                                }
-                                return out;
-                            } catch (e) {
-                                return view;
-                            }
-                        })(u8, detectedNalLen);
-
+                        const converted = this.convertToAnnexB(u8, detectedNalLen);
                         samplesData.push(converted);
                     }
                 };
@@ -369,90 +320,315 @@ class HEVCPlayer {
         });
     }
 
-parseMetadata(keysView, ilstView) {
-    try {
-        // Parse keys from 'keys' box
-        const keys = [];
+    convertToAnnexB(view, nalLenSize) {
+        try {
+            const chunks = [];
+            let off = 0;
+            if (typeof nalLenSize !== 'number' || nalLenSize < 1 || nalLenSize > 4) nalLenSize = 4;
 
-        let offset = 0;
-        const metadataSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
-        offset += 4;
+            while (off + nalLenSize <= view.length) {
+                let nalLen = 0;
+                for (let i = 0; i < nalLenSize; i++) {
+                    nalLen = (nalLen << 8) | view[off + i];
+                }
 
-        while (offset < keysView.byteLength) {
-            // Read item size (4 bytes, big-endian)
-            const itemSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read type (4 bytes after size)
-            const typeBytes = new Uint8Array(keysView.buffer, offset, 4);
-            offset += 4;
-            // Validate type and read data
-            const type = String.fromCharCode(...typeBytes);
-            const keySize = itemSize - 8;
-            if (type === 'mdta') {
-                const dataBytes = new Uint8Array(keysView.buffer, offset, keySize);
-                const key = new TextDecoder('utf-8').decode(dataBytes);
-                keys.push(key.trim());
+                if (nalLen <= 0 || nalLen > view.length - off - nalLenSize) {
+                    return view; // Already Annex-B or malformed
+                }
+
+                chunks.push(new Uint8Array([0x00, 0x00, 0x00, 0x01]));
+                chunks.push(view.slice(off + nalLenSize, off + nalLenSize + nalLen));
+                off += nalLenSize + nalLen;
             }
-            offset += keySize;
+
+            let total = 0;
+            for (const c of chunks) total += c.length;
+            const out = new Uint8Array(total);
+            let pos = 0;
+            for (const c of chunks) {
+                out.set(c, pos);
+                pos += c.length;
+            }
+            return out;
+        } catch (e) {
+            return view;
         }
-
-        if (metadataSize !== keys.length) {
-            console.warn('Keys metadata size mismatch:', metadataSize, 'vs parsed', keys.length);
-        }
-
-        // Parse values from 'ilst' box
-        const values = {};
-        offset = 0;
-
-        while (offset < ilstView.byteLength) {
-            // Read item size (4 bytes, big-endian)
-            const itemSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read item index (4 bytes after size)
-            const index = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read data size (4 bytes after index)
-            const dataSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            offset += 4;
-            // Read type (4 bytes after size)
-            const typeBytes = new Uint8Array(ilstView.buffer, offset, 4);
-            offset += 4;
-            // Read unused bytes (8 bytes)
-            const oneVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            if (oneVal !== 1) {
-                console.warn('Unexpected data box format, first 4 bytes != 1');
-            }
-            offset += 4;
-            const zeroVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
-            if (zeroVal !== 0) {
-                console.warn('Unexpected data box format, second 4 bytes != 0');
-            }
-            offset += 4;
-            // Validate type and read data
-            const type = String.fromCharCode(...typeBytes);
-            const valueSize = dataSize - 16;
-            if (type === 'data') {
-                // Read the actual data
-                const dataBytes = new Uint8Array(ilstView.buffer, offset, valueSize);
-                const value = new TextDecoder('utf-8').decode(dataBytes);
-                values[index - 1] = value;
-            }
-            offset += valueSize;
-        }
-
-        // Combine keys and values into metadata object
-        const metadata = {};
-        keys.forEach((key, i) => {
-            metadata[key] = values[i] || '';
-        });
-
-        console.log('Parsed metadata:', metadata);
-        return metadata;
-    } catch (e) {
-        console.error('Error parsing metadata:', e);
-        return {};
     }
-}
+
+    parseSEIFromAnnexB(data) {
+        const seiData = [];
+        let frameNumber = 0;
+        let offset = 0;
+
+        while (offset < data.length - 4) {
+            // Find start code (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01)
+            if (data[offset] === 0x00 && data[offset + 1] === 0x00) {
+                let startCodeLen = 0;
+                if (data[offset + 2] === 0x00 && data[offset + 3] === 0x01) {
+                    startCodeLen = 4;
+                } else if (data[offset + 2] === 0x01) {
+                    startCodeLen = 3;
+                } else {
+                    offset++;
+                    continue;
+                }
+
+                offset += startCodeLen;
+                if (offset >= data.length) break;
+
+                // Read NAL unit header (2 bytes for HEVC)
+                const nalHeader = (data[offset] << 8) | data[offset + 1];
+                const nalType = (nalHeader >> 9) & 0x3F;
+
+                // HEVC NAL unit types: 39 (PREFIX_SEI), 40 (SUFFIX_SEI)
+                // Also check for VCL NAL units to track frame numbers
+                if (nalType >= 0 && nalType <= 31) {
+                    // VCL NAL unit (coded slice)
+                    frameNumber++;
+                } else if (nalType === 39 || nalType === 40) {
+                    // SEI NAL unit found
+                    offset += 2; // Skip NAL header
+
+                    // Find next start code to determine NAL unit length
+                    let nalEnd = offset;
+                    while (nalEnd < data.length - 3) {
+                        if (data[nalEnd] === 0x00 && data[nalEnd + 1] === 0x00 &&
+                            (data[nalEnd + 2] === 0x01 || (data[nalEnd + 2] === 0x00 && data[nalEnd + 3] === 0x01))) {
+                            break;
+                        }
+                        nalEnd++;
+                    }
+
+                    const seiPayload = data.slice(offset, nalEnd);
+                    this.parseSEIPayload(seiPayload, frameNumber, seiData);
+                    offset = nalEnd;
+                    continue;
+                }
+
+                offset++;
+            } else {
+                offset++;
+            }
+        }
+
+        return seiData;
+    }
+
+    parseSEIPayload(payload, frameNumber, seiData) {
+        let offset = 0;
+
+        while (offset < payload.length) {
+            // Read payload type (can be multi-byte)
+            let payloadType = 0;
+            while (offset < payload.length && payload[offset] === 0xFF) {
+                payloadType += 255;
+                offset++;
+            }
+            if (offset >= payload.length) break;
+            payloadType += payload[offset++];
+
+            // Read payload size (can be multi-byte)
+            let payloadSize = 0;
+            while (offset < payload.length && payload[offset] === 0xFF) {
+                payloadSize += 255;
+                offset++;
+            }
+            if (offset >= payload.length) break;
+            payloadSize += payload[offset++];
+
+            if (offset + payloadSize > payload.length) break;
+
+            const payloadData = payload.slice(offset, offset + payloadSize);
+
+            // Parse specific SEI types
+            if (payloadType === 136 || payloadType === 0x88) {
+                // Time code SEI
+                const timecode = this.parseTimecodeSEI(payloadData);
+                if (timecode) {
+                    seiData.push({
+                        frameNumber,
+                        type: payloadType,
+                        ...timecode
+                    });
+                }
+            } else if (payloadType === 5 || payloadType === 0x05) {
+                // User data unregistered SEI
+                const userData = this.parseUserDataSEI(payloadData);
+                if (userData) {
+                    seiData.push({
+                        frameNumber,
+                        type: payloadType,
+                        ...userData
+                    });
+                }
+            }
+
+            offset += payloadSize;
+
+            // Skip trailing bits (0x80 byte alignment)
+            if (offset < payload.length && payload[offset] === 0x80) {
+                offset++;
+            }
+        }
+    }
+
+    parseTimecodeSEI(data) {
+        try {
+            if (data.length < 5) return null;
+
+            // Create a bit reader
+            let bitOffset = 0;
+            const readBits = (numBits) => {
+                let result = 0;
+                for (let i = 0; i < numBits; i++) {
+                    const byteIndex = Math.floor(bitOffset / 8);
+                    const bitIndex = 7 - (bitOffset % 8);
+                    if (byteIndex >= data.length) return 0;
+                    const bit = (data[byteIndex] >> bitIndex) & 1;
+                    result = (result << 1) | bit;
+                    bitOffset++;
+                }
+                return result;
+            };
+
+            // Read according to the minimal H265 format
+            const field0 = readBits(2);   // value=1, size=2
+            const field1 = readBits(1);   // value=1, size=1
+            const field2 = readBits(1);   // value=0, size=1
+            const field3 = readBits(5);   // value=0, size=5
+            const field4 = readBits(1);   // value=1, size=1
+            const field5 = readBits(1);   // value=0, size=1
+            const field6 = readBits(1);   // value=0, size=1
+
+            // The actual timecode values
+            const frames = readBits(9);   // frames_counter, size=9
+            const seconds = readBits(6);  // seconds_counter, size=6
+            const minutes = readBits(6);  // minutes_counter, size=6
+            const hours = readBits(5);    // hours_counter, size=5
+            const field11 = readBits(5);  // value=0, size=5
+
+            // Build timecode string HH:MM:SS:FF
+            const timecodeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+
+            return {
+                timecodeString,
+                hours,
+                minutes,
+                seconds,
+                frames,
+                dropFrame: false
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    parseUserDataSEI(data) {
+        try {
+            // Skip UUID (16 bytes) if present
+            let offset = 0;
+            if (data.length > 16) {
+                offset = 16;
+            }
+
+            // Try to decode remaining as UTF-8 string (often JSON)
+            const textData = data.slice(offset);
+            let jsonPayload = new TextDecoder('utf-8').decode(textData);
+            jsonPayload = jsonPayload.replace(/[^\x20-\x7E]/g, '');
+            jsonPayload = jsonPayload.trim();
+
+            return {
+                jsonPayload
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    parseMetadata(keysView, ilstView) {
+        try {
+            // Parse keys from 'keys' box
+            const keys = [];
+
+            let offset = 0;
+            const metadataSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
+            offset += 4;
+
+            while (offset < keysView.byteLength) {
+                // Read item size (4 bytes, big-endian)
+                const itemSize = new DataView(keysView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read type (4 bytes after size)
+                const typeBytes = new Uint8Array(keysView.buffer, offset, 4);
+                offset += 4;
+                // Validate type and read data
+                const type = String.fromCharCode(...typeBytes);
+                const keySize = itemSize - 8;
+                if (type === 'mdta') {
+                    const dataBytes = new Uint8Array(keysView.buffer, offset, keySize);
+                    const key = new TextDecoder('utf-8').decode(dataBytes);
+                    keys.push(key.trim());
+                }
+                offset += keySize;
+            }
+
+            if (metadataSize !== keys.length) {
+                console.warn('Keys metadata size mismatch:', metadataSize, 'vs parsed', keys.length);
+            }
+
+            // Parse values from 'ilst' box
+            const values = {};
+            offset = 0;
+
+            while (offset < ilstView.byteLength) {
+                // Read item size (4 bytes, big-endian)
+                const itemSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read item index (4 bytes after size)
+                const index = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read data size (4 bytes after index)
+                const dataSize = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                offset += 4;
+                // Read type (4 bytes after size)
+                const typeBytes = new Uint8Array(ilstView.buffer, offset, 4);
+                offset += 4;
+                // Read unused bytes (8 bytes)
+                const oneVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                if (oneVal !== 1) {
+                    console.warn('Unexpected data box format, first 4 bytes != 1');
+                }
+                offset += 4;
+                const zeroVal = new DataView(ilstView.buffer, offset, 4).getUint32(0, false);
+                if (zeroVal !== 0) {
+                    console.warn('Unexpected data box format, second 4 bytes != 0');
+                }
+                offset += 4;
+                // Validate type and read data
+                const type = String.fromCharCode(...typeBytes);
+                const valueSize = dataSize - 16;
+                if (type === 'data') {
+                    // Read the actual data
+                    const dataBytes = new Uint8Array(ilstView.buffer, offset, valueSize);
+                    const value = new TextDecoder('utf-8').decode(dataBytes);
+                    values[index - 1] = value;
+                }
+                offset += valueSize;
+            }
+
+            // Combine keys and values into metadata object
+            const metadata = {};
+            keys.forEach((key, i) => {
+                metadata[key] = values[i] || '';
+            });
+
+            console.log('Parsed metadata:', metadata);
+            return metadata;
+        } catch (e) {
+            console.error('Error parsing metadata:', e);
+            return {};
+        }
+    }
 
     processSEIData(seiDataRaw) {
         // Convert raw SEI data into structured format

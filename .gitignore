@@ -1,11 +1,5 @@
 # Editor
 .vscode/
-.idea/
-
-# Build artifacts
-wasm/build/
-dist/
-*.log
 
 # Test files
 *.mov
@@ -13,7 +7,3 @@ dist/
 
 # Dependencies
 node_modules/
-
-# OS
-.DS_Store
-Thumbs.db

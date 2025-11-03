@@ -75,19 +75,6 @@
         </main>
     </div>
 
-    <script src="/sei_parser.js"></script>
-    <script type="module">
-        let wasmReady = false;
-        let wasmModule = null;
-        SEIParser().then(module => {
-            wasmModule = module;
-            window.parseSEIData = module.parseSEIData;
-            wasmReady = true;
-            console.log('SEI Parser WASM module loaded successfully');
-        }).catch(err => {
-            console.error('Failed to load WASM module:', err);
-        });
-    </script>
     <script type="module" src="/src/player.js"></script>
 </body>
 
