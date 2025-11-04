@@ -28,16 +28,16 @@ export function formatJSON(jsonString) {
         const obj = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
         // If top-level is an object, render its contents without the outermost braces
         if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-            return formatObject(obj, 0, true);
+            return formatObject(obj, 0, true, '');
         }
 
-        return formatValue(obj, 0);
+        return formatValue(obj, 0, '');
     } catch (e) {
         return '<span class="json-invalid">Invalid JSON</span>';
     }
 }
 
-function formatValue(value, depth) {
+function formatValue(value, depth, path) {
     if (value === null) {
         return '<span class="json-null">null</span>';
     }
@@ -61,17 +61,17 @@ function formatValue(value, depth) {
     }
 
     if (Array.isArray(value)) {
-        return formatArray(value, depth);
+        return formatArray(value, depth, path);
     }
 
     if (type === 'object') {
-        return formatObject(value, depth);
+        return formatObject(value, depth, false, path);
     }
 
     return escapeHtml(String(value));
 }
 
-function formatObject(obj, depth, isRoot = false) {
+function formatObject(obj, depth, isRoot = false, path = '') {
     const keys = Object.keys(obj);
     if (keys.length === 0) {
         return '<span class="json-bracket">{}</span>';
@@ -81,21 +81,27 @@ function formatObject(obj, depth, isRoot = false) {
     const nextIndent = '  '.repeat(depth + 1);
     const id = 'obj-' + Math.random().toString(36).substring(2, 11);
 
+    // Check if this path should be expanded
+    const isExpanded = window.expandedJSONPaths && window.expandedJSONPaths.has(path);
+    const displayStyle = isExpanded ? '' : 'none';
+    const buttonText = isExpanded ? '-' : '+';
+
     // isRoot parameter indicates caller requested omission of outer braces
 
     let html = '';
     if (!isRoot) {
         html += `<span class="json-bracket">{</span>`;
         html += `<span class="json-collapsible" data-id="${id}">`;
-        html += `<button class="json-toggle" onclick="toggleJSON('${id}')">+</button>`;
-        html += `<div class="json-content" id="${id}" style="display: none;">`;
+        html += `<button class="json-toggle" onclick="toggleJSON('${id}')">${buttonText}</button>`;
+        html += `<div class="json-content" id="${id}" data-json-path="${escapeHtml(path)}" style="display: ${displayStyle};">`;
     } else {
-        html += `<div class="json-content root-json-content" id="${id}">`;
+        html += `<div class="json-content root-json-content" id="${id}" data-json-path="${escapeHtml(path)}">`;
     }
 
     keys.forEach((key, index) => {
+        const keyPath = path ? `${path}.${key}` : key;
         html += `\n${nextIndent}<span class="json-key">"${escapeHtml(key)}"</span>: `;
-        html += formatValue(obj[key], depth + 1);
+        html += formatValue(obj[key], depth + 1, keyPath);
         if (index < keys.length - 1) {
             html += '<span class="json-punctuation">,</span>';
         }
@@ -110,7 +116,7 @@ function formatObject(obj, depth, isRoot = false) {
     return html;
 }
 
-function formatArray(arr, depth) {
+function formatArray(arr, depth, path) {
     if (arr.length === 0) {
         return '<span class="json-bracket">[]</span>';
     }
@@ -119,14 +125,20 @@ function formatArray(arr, depth) {
     const nextIndent = '  '.repeat(depth + 1);
     const id = 'arr-' + Math.random().toString(36).substring(2, 11);
 
+    // Check if this path should be expanded
+    const isExpanded = window.expandedJSONPaths && window.expandedJSONPaths.has(path);
+    const displayStyle = isExpanded ? '' : 'none';
+    const buttonText = isExpanded ? '-' : '+';
+
     let html = `<span class="json-bracket">[</span>`;
     html += `<span class="json-collapsible" data-id="${id}">`;
-    html += `<button class="json-toggle" onclick="toggleJSON('${id}')">+</button>`;
-    html += `<div class="json-content" id="${id}" style="display: none;">`;
+    html += `<button class="json-toggle" onclick="toggleJSON('${id}')">${buttonText}</button>`;
+    html += `<div class="json-content" id="${id}" data-json-path="${escapeHtml(path)}" style="display: ${displayStyle};">`;
 
     arr.forEach((item, index) => {
+        const itemPath = `${path}[${index}]`;
         html += `\n${nextIndent}`;
-        html += formatValue(item, depth + 1);
+        html += formatValue(item, depth + 1, itemPath);
         if (index < arr.length - 1) {
             html += '<span class="json-punctuation">,</span>';
         }

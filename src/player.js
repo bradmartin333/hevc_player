@@ -6,6 +6,9 @@ import { VideoControls } from './controls/videoControls.js';
 import { ZoomPanController } from './controls/zoomPanController.js';
 import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
 
+// Track expanded JSON paths globally
+window.expandedJSONPaths = new Set();
+
 // Global function for toggling JSON sections
 window.toggleJSON = function (id) {
     const content = document.getElementById(id);
@@ -14,6 +17,16 @@ window.toggleJSON = function (id) {
         const isHidden = content.style.display === 'none';
         content.style.display = isHidden ? '' : 'none';
         button.textContent = isHidden ? '-' : '+';
+        
+        // Track the path for this toggle
+        const path = content.getAttribute('data-json-path');
+        if (path) {
+            if (isHidden) {
+                window.expandedJSONPaths.add(path);
+            } else {
+                window.expandedJSONPaths.delete(path);
+            }
+        }
     }
 };
 
