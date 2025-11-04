@@ -63,64 +63,33 @@ export class MP4Demuxer {
 
                 mp4boxFile.appendBuffer(arrayBuffer);
 
-                // Parse metadata
+                // Parse metadata (udta/meta)
                 let metadata = null;
                 const udtaBox = mp4boxFile.getBox('udta');
-                if (udtaBox) {
-                    const keys = Object.values(udtaBox.meta.keys.keys);
-                    const list = Object.values(udtaBox.meta.ilst.list);
-                    if (keys.length === list.length) {
+                if (udtaBox && udtaBox.meta && udtaBox.meta.keys && udtaBox.meta.keys.keys && udtaBox.meta.ilst && udtaBox.meta.ilst.list) {
+                    const keys = Object.values(udtaBox.meta.keys.keys || {});
+                    const list = Object.values(udtaBox.meta.ilst.list || {});
+                    if (keys.length === list.length && keys.length > 0) {
                         metadata = {};
                         for (let i = 0; i < keys.length; i++) {
-                            metadata[keys[i].toString().replace('mdta', '')] = list[i].value;
+                            try {
+                                const rawKey = keys[i];
+                                const keyName = rawKey ? rawKey.toString().replace('mdta', '') : String(i);
+                                const entry = list[i];
+                                metadata[keyName] = entry && Object.prototype.hasOwnProperty.call(entry, 'value') ? entry.value : null;
+                            } catch (e) {
+                                continue;
+                            }
                         }
                     }
                 }
 
                 // Extract 'reel_name' from 'stsd' box if available
-                const stsdBoxes = mp4boxFile.getBoxes('stsd');
-                if (stsdBoxes) {
-                    for (const box of stsdBoxes) {
-                        if (!box.entries) continue;
-                        for (const entry of box.entries) {
-                            if (!entry.data || entry.data.byteLength < entry.hdr_size + 12) continue;
-
-                            const view = new DataView(entry.data.buffer, entry.data.byteOffset);
-                            let offset = entry.hdr_size;
-
-                            // Check type (0x3C00)
-                            if (view.getUint16(offset, false) !== 0x3C00) continue;
-                            offset += 2;
-
-                            const totalSize = view.getUint32(offset, false);
-                            offset += 4;
-
-                            // Check key ('name')
-                            const key = String.fromCharCode(
-                                entry.data[offset], entry.data[offset + 1],
-                                entry.data[offset + 2], entry.data[offset + 3]
-                            );
-                            offset += 4;
-                            if (key !== 'name') continue;
-
-                            const keySize = view.getUint16(offset, false);
-                            offset += 2;
-
-                            // Validate size and type
-                            if (totalSize !== keySize + (offset - entry.hdr_size)) continue;
-                            if (view.getUint16(offset, false) !== 0) continue;
-                            offset += 2;
-
-                            // Extract reel_name
-                            if (keySize > 0 && entry.data.byteLength >= offset + keySize) {
-                                const value = String.fromCharCode(...entry.data.slice(offset, offset + keySize));
-                                if (value) {
-                                    if (!metadata) metadata = {};
-                                    metadata['reel_name'] = value;
-                                }
-                            }
-                        }
-                    }
+                let reelName = null;
+                reelName = this.extractReelName(mp4boxFile);
+                if (reelName) {
+                    if (!metadata) metadata = {};
+                    metadata['reel_name'] = reelName;
                 }
 
                 mp4boxFile.flush();
@@ -179,6 +148,54 @@ export class MP4Demuxer {
         } catch (e) {
             console.warn('Failed to detect nal unit length, falling back to 4 bytes', e);
             return 4;
+        }
+    }
+
+    extractReelName(mp4boxFile) {
+        try {
+            const stsdBoxes = mp4boxFile.getBoxes('stsd');
+            if (stsdBoxes) {
+                for (const box of stsdBoxes) {
+                    if (!box.entries) continue;
+                    for (const entry of box.entries) {
+                        if (!entry.data || entry.data.byteLength < entry.hdr_size + 12) continue;
+
+                        const view = new DataView(entry.data.buffer, entry.data.byteOffset);
+                        let offset = entry.hdr_size;
+
+                        // Check type (0x3C00)
+                        if (view.getUint16(offset, false) !== 0x3C00) continue;
+                        offset += 2;
+
+                        const totalSize = view.getUint32(offset, false);
+                        offset += 4;
+
+                        // Check key ('name')
+                        const key = String.fromCharCode(
+                            entry.data[offset], entry.data[offset + 1],
+                            entry.data[offset + 2], entry.data[offset + 3]
+                        );
+                        offset += 4;
+                        if (key !== 'name') continue;
+
+                        const keySize = view.getUint16(offset, false);
+                        offset += 2;
+
+                        // Validate size and type
+                        if (totalSize !== keySize + (offset - entry.hdr_size)) continue;
+                        if (view.getUint16(offset, false) !== 0) continue;
+                        offset += 2;
+
+                        // Extract reel_name
+                        if (keySize > 0 && entry.data.byteLength >= offset + keySize) {
+                            const value = String.fromCharCode(...entry.data.slice(offset, offset + keySize));
+                            return value;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            return null;
         }
     }
 
