@@ -234,6 +234,8 @@ main {
     font-family: 'Courier New', monospace;
     font-size: 12px;
     line-height: 1.6;
+    /* Preserve newlines and wrapping so '\n' in textContent shows as line breaks */
+    white-space: pre-wrap;
     max-width: 400px;
     pointer-events: none;
     display: none;

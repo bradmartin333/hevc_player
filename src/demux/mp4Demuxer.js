@@ -16,6 +16,7 @@ export class MP4Demuxer {
                 const { createFile } = await import('mp4box');
                 const mp4boxFile = createFile();
                 let hevcTrackId = null;
+                let tmcdTrackId = null;
                 const samplesData = [];
 
                 mp4boxFile.onError = (e) => {
@@ -28,7 +29,8 @@ export class MP4Demuxer {
                         const codec = (t.codec || '').toLowerCase();
                         if (codec.indexOf('hvc') !== -1 || codec.indexOf('hev') !== -1) {
                             hevcTrackId = t.id;
-                            break;
+                        } else if (codec.indexOf('tmcd') !== -1) {
+                            tmcdTrackId = t.id;
                         }
                     }
 
@@ -44,6 +46,9 @@ export class MP4Demuxer {
                     console.log('Detected NAL unit length (bytes):', detectedNalLen);
 
                     mp4boxFile.setExtractionOptions(hevcTrackId, null, { nbSamples: 0 });
+                    if (tmcdTrackId !== null) {
+                        mp4boxFile.setExtractionOptions(tmcdTrackId, null, { nbSamples: 0 });
+                    }
                     mp4boxFile.start();
                 };
 
@@ -68,6 +73,52 @@ export class MP4Demuxer {
                         metadata = {};
                         for (let i = 0; i < keys.length; i++) {
                             metadata[keys[i].toString().replace('mdta', '')] = list[i].value;
+                        }
+                    }
+                }
+
+                // Extract 'reel_name' from 'stsd' box if available
+                const stsdBoxes = mp4boxFile.getBoxes('stsd');
+                if (stsdBoxes) {
+                    for (const box of stsdBoxes) {
+                        if (!box.entries) continue;
+                        for (const entry of box.entries) {
+                            if (!entry.data || entry.data.byteLength < entry.hdr_size + 12) continue;
+
+                            const view = new DataView(entry.data.buffer, entry.data.byteOffset);
+                            let offset = entry.hdr_size;
+
+                            // Check type (0x3C00)
+                            if (view.getUint16(offset, false) !== 0x3C00) continue;
+                            offset += 2;
+
+                            const totalSize = view.getUint32(offset, false);
+                            offset += 4;
+
+                            // Check key ('name')
+                            const key = String.fromCharCode(
+                                entry.data[offset], entry.data[offset + 1],
+                                entry.data[offset + 2], entry.data[offset + 3]
+                            );
+                            offset += 4;
+                            if (key !== 'name') continue;
+
+                            const keySize = view.getUint16(offset, false);
+                            offset += 2;
+
+                            // Validate size and type
+                            if (totalSize !== keySize + (offset - entry.hdr_size)) continue;
+                            if (view.getUint16(offset, false) !== 0) continue;
+                            offset += 2;
+
+                            // Extract reel_name
+                            if (keySize > 0 && entry.data.byteLength >= offset + keySize) {
+                                const value = String.fromCharCode(...entry.data.slice(offset, offset + keySize));
+                                if (value) {
+                                    if (!metadata) metadata = {};
+                                    metadata['reel_name'] = value;
+                                }
+                            }
                         }
                     }
                 }

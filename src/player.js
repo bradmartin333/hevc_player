@@ -348,8 +348,14 @@ class HEVCPlayer {
 
         if (seiFrame && (seiFrame.timecode || seiFrame.userData)) {
             let overlayContent = '';
+            let addNewline = false;
             if (seiFrame.timecode) {
-                overlayContent += `TC: ${seiFrame.timecode.timecodeString}\n`;
+                overlayContent += `TC: ${seiFrame.timecode.timecodeString}`;
+                addNewline = true;
+            }
+            if (this.metadata && this.metadata['reel_name']) {
+                if (addNewline) overlayContent += '\n';
+                overlayContent += `Reel: ${this.metadata['reel_name']}`;
             }
             this.metadataOverlay.textContent = overlayContent;
             this.metadataOverlay.classList.add('visible');
