@@ -776,3 +776,63 @@ main {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(74, 158, 255, 0.6);
 }
+
+/* HEVC Support Message Styles */
+.hevc-support-message {
+    background: rgba(255, 152, 0, 0.1);
+    border: 2px solid rgba(255, 152, 0, 0.5);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px;
+    color: #e0e0e0;
+}
+
+.hevc-support-message h3 {
+    color: #ff9800;
+    margin-bottom: 12px;
+    font-size: 1.2em;
+}
+
+.hevc-support-message h4 {
+    color: #ffa726;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-size: 1em;
+}
+
+.hevc-support-message p {
+    margin-bottom: 12px;
+    line-height: 1.6;
+}
+
+.hevc-support-message ul {
+    margin-left: 20px;
+    margin-bottom: 12px;
+}
+
+.hevc-support-message li {
+    margin-bottom: 10px;
+    line-height: 1.6;
+}
+
+.hevc-support-message code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #4fc3f7;
+}
+
+.hevc-support-message .note {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(33, 150, 243, 0.1);
+    border-left: 3px solid #2196f3;
+    border-radius: 4px;
+    font-size: 0.95em;
+}
+
+.hevc-support-message strong {
+    color: #fff;
+}
