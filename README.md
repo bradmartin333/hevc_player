@@ -18,6 +18,43 @@ HEVC container (.mov) video player with real-time SEI metadata extraction and di
 - **Real-time Overlay**: Optional metadata overlay during playback
 - **Zoom and Pan**: Open a separate window to zoom and pan the video frame
 
+## Browser Requirements
+
+### HEVC/H.265 Video Playback Support
+
+This player requires browser support for HEVC/H.265 video codec. **SEI metadata extraction works regardless of browser support**, but video playback requires one of the following:
+
+#### Supported Browsers
+
+**macOS/iOS:**
+- Safari (all recent versions) - Native HEVC support ✅
+- Chrome 136+ - Native HEVC support ✅
+- Edge 136+ - Native HEVC support ✅
+
+**Windows:**
+- Chrome 136+ - Native HEVC support ✅
+- Edge 136+ - Native HEVC support ✅
+- Firefox - Not supported ❌
+
+**Linux (Ubuntu, etc.):**
+- **Firefox 137+** with system HEVC codecs - Supported ✅
+  ```bash
+  sudo apt install gstreamer1.0-libde265 gstreamer1.0-plugins-bad
+  ```
+- **Chrome/Chromium** - Limited support with VAAPI hardware acceleration
+  - Official builds do not include HEVC support due to licensing
+  - May work with hardware acceleration if GPU supports VAAPI
+  - Third-party patched builds available (unofficial)
+
+#### Fallback Options
+
+If your browser doesn't support HEVC playback:
+1. **Use a supported browser** (recommended)
+2. **Install system codecs** (Linux only, see above)
+3. **Download and play locally** with VLC, MPV, or other media players that support HEVC
+
+The application will automatically detect if your browser supports HEVC and display helpful instructions if it doesn't.
+
 ## Development Setup
 
 ### Install Node.js 20+ and npm
