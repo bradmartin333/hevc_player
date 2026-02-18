@@ -172,12 +172,11 @@ export class SEIParser {
     }
 
     /**
-     * Remove RBSP emulation prevention bytes (0x03) that the encoder inserts
-     * after 0x00 0x00 when the next byte is 0x00, 0x01, 0x02, or 0x03.
+     * Remove RBSP emulation prevention bytes (0x03) that the encoder inserts after 0x00 0x00
      *   0x00 00 03 00 => 0x00 00 00
      *   0x00 00 03 01 => 0x00 00 01
      *   0x00 00 03 02 => 0x00 00 02
-     *   0x00 00 03 03 => 0x00 00 03
+     *   0x00 00 03 0X => 0x00 00 0X
      */
     rbspDecode(data) {
         const output = new Uint8Array(data.length);
@@ -190,14 +189,10 @@ export class SEIParser {
                 data[i + 1] === 0x00 &&
                 data[i + 2] === 0x03
             ) {
-                // Check that 0x03 is actually an emulation prevention byte
-                // (next byte after 0x03 must be 0x00-0x03, or 0x03 is at the end)
-                if (i + 3 >= data.length || data[i + 3] <= 0x03) {
-                    output[outIdx++] = 0x00;
-                    output[outIdx++] = 0x00;
-                    i += 2; // skip the 0x03; loop increment handles the next byte
-                    continue;
-                }
+                output[outIdx++] = 0x00;
+                output[outIdx++] = 0x00;
+                i += 2; // skip the 0x03; loop increment handles the next byte
+                continue;
             }
             output[outIdx++] = data[i];
         }
