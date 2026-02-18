@@ -45,7 +45,8 @@ export class SEIParser {
                         nalEnd++;
                     }
 
-                    const seiPayload = data.slice(offset, nalEnd);
+                    const rawPayload = data.slice(offset, nalEnd);
+                    const seiPayload = this.rbspDecode(rawPayload);
                     this.parseSEIPayload(seiPayload, frameNumber, seiData);
                     offset = nalEnd;
                     continue;
@@ -168,6 +169,40 @@ export class SEIParser {
         } catch (e) {
             return null;
         }
+    }
+
+    /**
+     * Remove RBSP emulation prevention bytes (0x03) that the encoder inserts
+     * after 0x00 0x00 when the next byte is 0x00, 0x01, 0x02, or 0x03.
+     *   0x00 00 03 00 => 0x00 00 00
+     *   0x00 00 03 01 => 0x00 00 01
+     *   0x00 00 03 02 => 0x00 00 02
+     *   0x00 00 03 03 => 0x00 00 03
+     */
+    rbspDecode(data) {
+        const output = new Uint8Array(data.length);
+        let outIdx = 0;
+
+        for (let i = 0; i < data.length; i++) {
+            if (
+                i + 2 < data.length &&
+                data[i] === 0x00 &&
+                data[i + 1] === 0x00 &&
+                data[i + 2] === 0x03
+            ) {
+                // Check that 0x03 is actually an emulation prevention byte
+                // (next byte after 0x03 must be 0x00-0x03, or 0x03 is at the end)
+                if (i + 3 >= data.length || data[i + 3] <= 0x03) {
+                    output[outIdx++] = 0x00;
+                    output[outIdx++] = 0x00;
+                    i += 2; // skip the 0x03; loop increment handles the next byte
+                    continue;
+                }
+            }
+            output[outIdx++] = data[i];
+        }
+
+        return output.slice(0, outIdx);
     }
 
     parseUserDataSEI(data) {
