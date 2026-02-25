@@ -5,6 +5,7 @@ import { MP4Demuxer } from './demux/mp4Demuxer.js';
 import { VideoControls } from './controls/videoControls.js';
 import { ZoomPanController } from './controls/zoomPanController.js';
 import { formatTime, formatFileSize, formatJSON } from './utils/formatters.js';
+import { CodecDetection } from './utils/codecDetection.js';
 
 // Track expanded JSON paths globally
 window.expandedJSONPaths = new Set();
@@ -61,6 +62,8 @@ class HEVCPlayer {
         this.mp4Demuxer = new MP4Demuxer();
         this.videoControls = new VideoControls(this.video, this);
         this.zoomPanController = new ZoomPanController(this.video, this);
+        this.codecDetection = new CodecDetection();
+        this.hevcSupported = null; // Will be checked when loading a file
 
         this.initEventListeners();
         this.updateStatus('Ready - Load a video file to begin');
@@ -92,6 +95,7 @@ class HEVCPlayer {
         this.video.addEventListener('play', () => this.videoControls.updatePlayButton(true));
         this.video.addEventListener('pause', () => this.videoControls.updatePlayButton(false));
         this.video.addEventListener('ended', () => this.videoControls.updatePlayButton(false));
+        this.video.addEventListener('error', (e) => this.handleVideoError(e));
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
 
         // Metadata view toggle
@@ -145,6 +149,14 @@ class HEVCPlayer {
 
         this.currentFile = file;
         this.fileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+
+        // Check HEVC support (only check once)
+        if (this.hevcSupported === null) {
+            this.hevcSupported = await this.codecDetection.detectHEVCSupport();
+            if (!this.hevcSupported) {
+                this.showHEVCWarning();
+            }
+        }
 
         // Attach file to video element for playback
         try {
@@ -452,6 +464,73 @@ class HEVCPlayer {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    showHEVCWarning() {
+        // Show a persistent warning about HEVC support
+        const message = this.codecDetection.getHEVCSupportMessage();
+        const videoContainer = document.querySelector('.video-container');
+        if (videoContainer) {
+            // Create warning overlay
+            let warningDiv = document.getElementById('hevc-warning-overlay');
+            if (!warningDiv) {
+                warningDiv = document.createElement('div');
+                warningDiv.id = 'hevc-warning-overlay';
+                warningDiv.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.85);
+                    z-index: 100;
+                    overflow-y: auto;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+                videoContainer.appendChild(warningDiv);
+            }
+            warningDiv.innerHTML = message;
+        }
+    }
+
+    handleVideoError(event) {
+        const error = this.video.error;
+        if (!error) return;
+
+        console.error('Video error:', error);
+
+        let errorMessage = 'Video playback error: ';
+        switch (error.code) {
+            case error.MEDIA_ERR_ABORTED:
+                errorMessage += 'Playback aborted by user';
+                break;
+            case error.MEDIA_ERR_NETWORK:
+                errorMessage += 'Network error while loading video';
+                break;
+            case error.MEDIA_ERR_DECODE:
+                errorMessage += 'Video decoding failed. Your browser may not support HEVC/H.265 codec.';
+                if (!this.hevcSupported) {
+                    this.showHEVCWarning();
+                }
+                break;
+            case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                errorMessage += 'Video format not supported. Your browser does not support HEVC/H.265 codec.';
+                if (!this.hevcSupported) {
+                    this.showHEVCWarning();
+                }
+                break;
+            default:
+                errorMessage += 'Unknown error';
+                break;
+        }
+
+        console.error(errorMessage);
+        // Don't overwrite the status if we're showing detailed instructions
+        if (this.hevcSupported !== false) {
+            this.updateStatus(errorMessage);
+        }
     }
 }
 
