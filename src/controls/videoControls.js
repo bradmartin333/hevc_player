@@ -34,9 +34,11 @@ export class VideoControls {
 
     stepFrameBackward(fps = 60) {
         if (!this.video.duration) return;
-        const currentFrame = Math.round(this.video.currentTime * fps);
+        const currentFrame = Math.floor(this.video.currentTime * fps);
         const targetFrame = Math.max(currentFrame - 1, 0);
-        const newTime = Math.max(targetFrame / fps + 0.001, 0);
+        let newTime = targetFrame / fps + 0.001;
+        if (newTime < 0) newTime = 0;
+        if (newTime > this.video.duration) newTime = this.video.duration;
         this.video.currentTime = newTime;
         if (!this.video.paused) {
             this.video.pause();
@@ -45,11 +47,12 @@ export class VideoControls {
 
     stepFrameForward(fps = 60) {
         if (!this.video.duration) return;
-        const currentFrame = Math.round(this.video.currentTime * fps);
+        const currentFrame = Math.floor(this.video.currentTime * fps);
         const maxFrame = Math.floor(this.video.duration * fps);
         const targetFrame = Math.min(currentFrame + 1, maxFrame);
         let newTime = targetFrame / fps + 0.001;
         if (newTime > this.video.duration) newTime = this.video.duration;
+        if (newTime < 0) newTime = 0;
         this.video.currentTime = newTime;
         if (!this.video.paused) {
             this.video.pause();
